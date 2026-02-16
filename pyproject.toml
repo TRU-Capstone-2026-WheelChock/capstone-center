@@ -8,6 +8,7 @@ authors = ["kmiya <miyak19@mytru.ca>"]
 python = "^3.12"
 pydantic = "^2.12.5"
 zmq = "^0.0.0"
+msg-handler = {git = "https://github.com/TRU-Capstone-2026-WheelChock/wheelchoke-system-communication-system.git"}
 
 [tool.poetry.dev-dependencies]
 
