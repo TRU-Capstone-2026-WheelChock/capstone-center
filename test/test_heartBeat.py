@@ -17,6 +17,9 @@ from msg_handler import (
 )
 
 from .helpers import HbState
+from capstone_center.main import CenterSubscriber
+from capstone_center.msg_recv_processor import MessageRecvProcessor
+from capstone_center.msg_data_handler import MessageDataProcessor
 
 log = logging.getLogger(__name__)
 
@@ -35,9 +38,9 @@ async def aiter_msgs_from_scenario(sender_id = 0, sender_name = "sender_01", dat
 
 
 
-endpoint = "tcp://127.0.0.1:5551"
 
-async def run_pub_hb(endpoint = endpoint, sender_id = 0, sender_name = "sender_01", data_type = "test", *, scenarios : list[HbState]):
+
+async def run_pub_hb(endpoint = "tcp://127.0.0.1:5551", sender_id = 0, sender_name = "sender_01", data_type = "test", *, scenarios : list[HbState]):
     pub_opt = ZmqPubOptions(endpoint)
     with get_publisher(pub_opt) as pub:
         await asyncio.sleep(0.1) # wait for first setup
@@ -50,7 +53,39 @@ async def run_pub_hb(endpoint = endpoint, sender_id = 0, sender_name = "sender_0
 
 @pytest.mark.asyncio
 async def test_heart_beat_single_test():
+    endpoint = "tcp://127.0.0.1:5551"
+    scenario_1 = [
+        HbState(
+            "OK", delay=0.5
+        ),
+        HbState(
+            "OK", delay=0.5
+        ),
+        HbState(
+            "OK", delay=0.5
+        ),
+        HbState(
+            "OK", delay=0.5
+        )
+    ]
+    test_sub = ZmqSubOptions(
+        endpoint="tcp://127.0.0.1:5551",
+        topics=[""],
+        is_bind=True,
+    )
+    
+    shared_list = []
+    msg_recv_processor = MessageRecvProcessor(shared_list)
+    msg_data_processor = MessageDataProcessor(shared_list)
 
+
+    main_process = CenterSubscriber(msg_recv_processor, msg_data_processor)
+
+
+    
+    
+    await run_pub_hb(endpoint)
+    
     assert True
 
 
