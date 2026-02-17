@@ -1,51 +1,52 @@
-# --- 1. Builder Stage ---
-FROM python:3.12-bookworm AS builder
+# syntax=docker/dockerfile:1.6
+
+FROM python:3.12-bookworm AS builder-main
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir poetry
 
 ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=true \
-    POETRY_VIRTUALENVS_CREATE=true 
-    
-RUN apt-get update && apt-get install -y git
-RUN pip install poetry
+    POETRY_VIRTUALENVS_CREATE=true
 
 COPY pyproject.toml poetry.lock* ./
-RUN poetry install --only main --no-root
+RUN --mount=type=cache,target=/root/.cache/pypoetry \
+    --mount=type=cache,target=/root/.cache/pip \
+    poetry install --only main --no-root
 
 
-# --- 2. Development Stage (Local Dev) ---
-FROM python:3.12-bookworm AS development
+FROM python:3.12-bookworm AS builder-dev
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir poetry
 
 ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_CREATE=false
-
-RUN apt-get update && apt-get install -y git
-RUN pip install poetry
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
+    POETRY_VIRTUALENVS_CREATE=true
 
 COPY pyproject.toml poetry.lock* ./
+RUN --mount=type=cache,target=/root/.cache/pypoetry \
+    --mount=type=cache,target=/root/.cache/pip \
+    poetry install --with dev --no-root
 
-# RUN poetry env use /usr/local/bin/python
-RUN poetry lock && poetry install --no-root
 
-# COPY . . #Done by vscode
-
-CMD ["sleep", "infinity"]
-
-# --- 3. Production Stage ---
-FROM python:3.12-slim-bookworm AS production
+# ---- prod runtime (main only) ----
+FROM python:3.12-bookworm AS prod
 WORKDIR /app
-
-COPY --from=builder /app/.venv /app/.venv
-COPY src ./src
-
+COPY --from=builder-main /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
-
+COPY src ./src
 CMD ["python", "src/main.py"]
 
 
-# --- 4. CI Stage (Testing) ---
-FROM production AS ci-test
-RUN pip install pytest pytest-mock
-COPY test/ ./test/
-CMD ["pytest"]
+# ---- CI test runner (dev venv) ----
+FROM python:3.12-bookworm AS test
+WORKDIR /app
+COPY --from=builder-dev /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+COPY src ./src
+COPY tests ./tests
+ENV PYTHONPATH=/app/src
+CMD ["pytest", "-q"]

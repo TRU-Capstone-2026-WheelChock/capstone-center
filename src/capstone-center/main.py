@@ -2,6 +2,15 @@
 import os
 import asyncio
 import msg_handler
+import logging
+from logging.handlers import RotatingFileHandler
+from .config import LOG_FORMAT
+
+level_name = os.getenv("LOGGER_LEVEL", "INFO").upper()
+level = getattr(logging, level_name, logging.INFO)
+logging.basicConfig(level=level format=LOG_FORMAT)
+
+
 
 def get_opt() -> msg_handler.ZmqSubOptions:
     endpoint = os.getenv("ZMQ_SUB_ENDPOINT", "tcp://localhost:5555")
@@ -16,30 +25,19 @@ def get_opt() -> msg_handler.ZmqSubOptions:
         is_bind=is_bind,
     )
 
-async def handle_heart_beat(msg: msg_handler.SensorMessage) -> None:
-    print("HB:", msg.sender_id, msg.payload)
 
-async def handle_sensor_status(msg: msg_handler.SensorMessage) -> None:
-    print("SENSOR:", msg.sender_id, msg.payload)
-
-async def run_subscriber(sub_opt: msg_handler.ZmqSubOptions) -> None:
-    async with msg_handler.get_async_subscriber(sub_opt) as sub:
-        async for raw in sub:
-            msg = msg_handler.SensorMessage.model_validate(raw)
-
-            if msg.data_type == "heartbeat":
-                await handle_heart_beat(msg)
-            elif msg.data_type == "sensor":
-                await handle_sensor_status(msg)
-            else:
-                print("Unknown data_type:", msg.data_type)
 
 async def main() -> None:
     sub_opt = get_opt()
-    await run_subscriber(sub_opt)
+    # await run_subscriber(sub_opt)
 
 if __name__ == "__main__":
     asyncio.run(main())
+    handler = RotatingFileHandler(
+    "app.log",
+    maxBytes=5 * 1024 * 1024,
+    backupCount=10 
+        )       
 
 
 

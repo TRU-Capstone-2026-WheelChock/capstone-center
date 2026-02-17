@@ -1,12 +1,16 @@
 {
   "name": "capstone-center-dev",
   "build": {
-    "dockerfile": "../Dockerfile",
+    "dockerfile": "../Dockerfile.dev",
     "context": "..",
-    "target": "development"
+    // "target": "development",
+    "args": { "USERNAME": "dev", "UID": "1000", "GID": "1000" },
   },
   "workspaceFolder": "/app",
   "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind",
+  "mounts": [
+  "source=poetry-venv,target=/app/.venv,type=volume"
+  ],
   "customizations": {
     "vscode": {
       "settings": {
