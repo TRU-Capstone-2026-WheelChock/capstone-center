@@ -4,11 +4,12 @@ import asyncio
 import msg_handler
 import logging
 from logging.handlers import RotatingFileHandler
-from .config import LOG_FORMAT
+from config import LOG_FORMAT
+from msg_processor import MessageProcessor
 
 level_name = os.getenv("LOGGER_LEVEL", "INFO").upper()
 level = getattr(logging, level_name, logging.INFO)
-logging.basicConfig(level=level format=LOG_FORMAT)
+logging.basicConfig(level=level, format=LOG_FORMAT)
 
 
 
@@ -29,7 +30,11 @@ def get_opt() -> msg_handler.ZmqSubOptions:
 
 async def main() -> None:
     sub_opt = get_opt()
-    # await run_subscriber(sub_opt)
+    msg_processor = MessageProcessor()
+    await msg_processor.run_subscriber(sub_opt)
+    
+    # other async function which can read msg_processor.shared_list
+
 
 if __name__ == "__main__":
     asyncio.run(main())

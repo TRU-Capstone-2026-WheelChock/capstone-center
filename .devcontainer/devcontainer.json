@@ -1,20 +1,12 @@
 {
   "name": "capstone-center-dev",
-  "build": {
-    "dockerfile": "../Dockerfile.dev",
-    "context": "..",
-    // "target": "development",
-    "args": { "USERNAME": "dev", "UID": "1000", "GID": "1000" },
-  },
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "app",
   "workspaceFolder": "/app",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind",
-  "mounts": [
-  "source=poetry-venv,target=/app/.venv,type=volume"
-  ],
   "customizations": {
     "vscode": {
       "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.defaultInterpreterPath": "/app/.venv/bin/python",
         "python.formatting.provider": "none",
         "editor.formatOnSave": true
       },
@@ -22,8 +14,9 @@
         "ms-python.python",
         "ms-python.vscode-pylance",
         "njpwerner.autodocstring",
-        "tamasfe.even-better-toml",
+        "tamasfe.even-better-toml"
       ]
     }
-  }
+  },
+  "remoteUser": "dev"
 }
