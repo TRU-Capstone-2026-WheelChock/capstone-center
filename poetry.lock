@@ -238,7 +238,7 @@ files = [
 
 [[package]]
 name = "msg-handler"
-version = "0.2.0"
+version = "0.2.2"
 description = "Sensor and Heartbeat message handling with MessageQueue system and Pydantic"
 optional = false
 python-versions = "^3.10"
@@ -254,7 +254,7 @@ pyzmq = "^27.1.0"
 type = "git"
 url = "https://github.com/TRU-Capstone-2026-WheelChock/wheelchoke-system-communication-system.git"
 reference = "HEAD"
-resolved_reference = "48bb64f61fe2f258f598e3a976eed365703b58a4"
+resolved_reference = "becf00a4a739f8144fcc54bb816058d047816162"
 
 [[package]]
 name = "mypy"

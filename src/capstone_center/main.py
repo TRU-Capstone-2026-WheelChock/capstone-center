@@ -7,12 +7,13 @@ import logging
 from capstone_center.config import LOG_FORMAT
 
 from capstone_center.msg_recv_processor import MessageRecvProcessor
-from capstone_center.msg_data_handler import MessageDataProcessor
+from capstone_center.state_store import RuntimeState, SensorPresence, ComponentHealth
 
 
 level_name = os.getenv("LOGGER_LEVEL", "INFO").upper()
 level = getattr(logging, level_name, logging.INFO)
 logging.basicConfig(level=level, format=LOG_FORMAT)
+logger = logging.getLogger(__name__)
 
 
 
@@ -32,9 +33,8 @@ def get_opt() -> msg_handler.ZmqSubOptions:
 
 
 class CenterSubscriber:
-    def __init__(self, msg_recv_processor: MessageRecvProcessor, msg_data_processor:MessageDataProcessor):
+    def __init__(self, msg_recv_processor: MessageRecvProcessor):
         self.msg_recv_processor = msg_recv_processor
-        self.msg_data_processor = msg_data_processor
 
     async def run(self, sub_opt: msg_handler.ZmqSubOptions):
         process_task = asyncio.create_task(self.msg_data_processor.process_data())
@@ -49,12 +49,15 @@ class CenterSubscriber:
 
 
 if __name__ == "__main__":
-    shared_list = []
-    msg_recv_processor = MessageRecvProcessor(shared_list)
-    msg_data_processor = MessageDataProcessor(shared_list)
+    
+
+    state = RuntimeState()
+    state_lock = asyncio.Lock()
 
 
-    main_process = CenterSubscriber(msg_recv_processor, msg_data_processor)
+    msg_recv_processor = MessageRecvProcessor(state, state_lock)
+
+    main_process = CenterSubscriber(msg_recv_processor)
     asyncio.run(main_process.run(get_opt()))
        
 
