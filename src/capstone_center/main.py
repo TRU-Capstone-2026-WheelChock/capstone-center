@@ -37,13 +37,13 @@ class CenterSubscriber:
         self.msg_recv_processor = msg_recv_processor
 
     async def run(self, sub_opt: msg_handler.ZmqSubOptions):
-        process_task = asyncio.create_task(self.msg_data_processor.process_data())
+        
 
         try:
             await self.msg_recv_processor.run_subscriber(sub_opt)
         finally:
-            process_task.cancel()
-            await asyncio.gather(process_task, return_exceptions=True)
+            
+            pass
 
 
 
