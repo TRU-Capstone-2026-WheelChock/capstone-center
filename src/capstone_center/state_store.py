@@ -125,10 +125,6 @@ class StatusHistory:
         """Return status history as a list in insertion order."""
         return list(self.status_deque)
 
-
-    
-
-
 @dataclass
 class RuntimeState:
     """Aggregate runtime state shared by async tasks.

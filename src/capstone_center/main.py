@@ -1,64 +1,136 @@
-# src/your_module/main.py
-import os
 import asyncio
-import msg_handler
 import logging
+from pathlib import Path
+from typing import Any
 
-from capstone_center.config import LOG_FORMAT
+import msg_handler
+import yaml
 
+from capstone_center.heartbeat_process import HeartbeatConfig, HeartbeatProcessor
 from capstone_center.msg_recv_processor import MessageRecvProcessor
-from capstone_center.state_store import RuntimeState, SensorPresence, ComponentHealth
+from capstone_center.state_store import RuntimeState
 
 
-level_name = os.getenv("LOGGER_LEVEL", "INFO").upper()
-level = getattr(logging, level_name, logging.INFO)
-logging.basicConfig(level=level, format=LOG_FORMAT)
-logger = logging.getLogger(__name__)
+def load_config(path: str = "config.yml") -> dict[str, Any]:
+    try:
+        with Path(path).open("r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        raise SystemExit(f"config not found: {path}")
+    except yaml.YAMLError as e:
+        raise SystemExit(f"invalid yaml: {e}")
+
+    if not isinstance(config, dict):
+        raise SystemExit("config root must be a mapping")
+    return config
 
 
+def setup_logger(config: dict[str, Any]) -> logging.Logger:
+    try:
+        level_name = str(config["logging"]["level"]).upper()
+        log_format = config["logging"]["format"]
+    except KeyError as e:
+        raise SystemExit(f"missing required config: logging.{e.args[0]}")
 
-def get_opt() -> msg_handler.ZmqSubOptions:
-    endpoint = os.getenv("ZMQ_SUB_ENDPOINT", "tcp://localhost:5555")
-    topics_raw = os.getenv("ZMQ_SUB_TOPICS", "") 
-    topics = [t.strip() for t in topics_raw.split(",")] if topics_raw else [""]
+    level = getattr(logging, level_name, None)
+    if not isinstance(level, int):
+        raise SystemExit(f"invalid logging.level: {level_name}")
 
-    is_bind = os.getenv("ZMQ_SUB_IS_BIND", "true").lower() in ("1", "true", "yes", "y")
+    logging.basicConfig(level=level, format=log_format)
+    return logging.getLogger(__name__)
+
+
+def get_opt(
+    config: dict[str, Any],
+    *,
+    endpoint: str | None = None,
+    topics: list[str] | None = None,
+    is_bind: bool | None = None,
+) -> msg_handler.ZmqSubOptions:
+    try:
+        endpoint_cfg = config["zmq"]["sub"]["endpoint"]
+        topics_cfg = config["zmq"]["sub"]["topics"]
+        is_bind_cfg = config["zmq"]["sub"]["is_bind"]
+    except KeyError as e:
+        raise SystemExit(f"missing required config: zmq.sub.{e.args[0]}")
+
+    endpoint_val = endpoint_cfg if endpoint is None else endpoint
+
+    topics_val = topics_cfg if topics is None else topics
+    if not isinstance(topics_val, list):
+        raise SystemExit("zmq.sub.topics must be list")
+    if not all(isinstance(t, str) for t in topics_val):
+        raise SystemExit("zmq.sub.topics items must be string")
+
+    is_bind_val = is_bind_cfg if is_bind is None else is_bind
+    if not isinstance(is_bind_val, bool):
+        raise SystemExit("zmq.sub.is_bind must be bool")
 
     return msg_handler.ZmqSubOptions(
-        endpoint=endpoint,
-        topics=topics,
-        is_bind=is_bind,
+        endpoint=endpoint_val,
+        topics=topics_val,
+        is_bind=is_bind_val,
     )
 
 
+class CenterApp:
+    def __init__(
+        self,
+        recv: MessageRecvProcessor,
+        hb: HeartbeatProcessor,
+        logger: logging.Logger | None = None,
+    ):
+        self.recv = recv
+        self.hb = hb
+        self.logger = logger or logging.getLogger(__name__)
 
-class CenterSubscriber:
-    def __init__(self, msg_recv_processor: MessageRecvProcessor):
-        self.msg_recv_processor = msg_recv_processor
-
-    async def run(self, sub_opt: msg_handler.ZmqSubOptions):
-        
-
-        try:
-            await self.msg_recv_processor.run_subscriber(sub_opt)
-        finally:
-            
-            pass
+    async def run(self) -> None:
+        self.logger.info("start TaskGroup")
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(self.recv.run(), name="subscriber")
+            tg.create_task(self.hb.run(), name="heartbeat-runner")
 
 
+def build_heartbeat_config(config: dict[str, Any]) -> HeartbeatConfig:
+    try:
+        runtime = config["runtime"]
+        return HeartbeatConfig(
+            loop_time=float(runtime["watchdog_interval_sec"]),
+            timeout_threshold=float(runtime["heartbeat_timeout_sec"]),
+            remove_threshold=float(runtime["heartbeat_remove_sec"]),
+        )
+    except KeyError as e:
+        raise SystemExit(f"missing required config: runtime.{e.args[0]}")
+    except (TypeError, ValueError):
+        raise SystemExit("runtime heartbeat values must be numeric")
 
 
-if __name__ == "__main__":
-    
+def main(config_path: str = "config.yml") -> None:
+    config = load_config(config_path)
+    logger = setup_logger(config)
 
     state = RuntimeState()
     state_lock = asyncio.Lock()
 
+    sub_opt = get_opt(config)
+    hb_config = build_heartbeat_config(config)
 
-    msg_recv_processor = MessageRecvProcessor(state, state_lock)
+    msg_recv_processor = MessageRecvProcessor(
+        state,
+        state_lock,
+        sub_opt,
+        logger=logger,
+    )
+    heartbeat_processor = HeartbeatProcessor(
+        state,
+        state_lock,
+        hb_config=hb_config,
+        logger=logger,
+    )
 
-    main_process = CenterSubscriber(msg_recv_processor)
-    asyncio.run(main_process.run(get_opt()))
-       
+    main_process = CenterApp(msg_recv_processor, heartbeat_processor, logger=logger)
+    asyncio.run(main_process.run())
 
 
+if __name__ == "__main__":
+    main()

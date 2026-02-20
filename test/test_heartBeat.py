@@ -1,91 +1,70 @@
 import asyncio
-from collections.abc import AsyncIterator
-from dataclasses import dataclass
-import logging
+from datetime import datetime, timedelta
+
 import pytest
 
-
-from msg_handler import (
-    get_publisher,
-    get_subscriber,
-    get_async_subscriber,
-    ZmqPubOptions,
-    ZmqSubOptions,
-    SensorMessage,
-    SensorPayload,
-    HeartBeatPayload
-)
-
-from .helpers import HbState
-from capstone_center.main import CenterSubscriber
-from capstone_center.msg_recv_processor import MessageRecvProcessor
-from capstone_center.msg_data_handler import MessageDataProcessor
-
-log = logging.getLogger(__name__)
-
-async def aiter_msgs_from_scenario(sender_id = 0, sender_name = "sender_01", data_type = "test", *, scenarios : list[HbState]) -> AsyncIterator[SensorMessage]:
-    msgs : list[SensorMessage]  =[]
-    for s in scenarios:
-        await asyncio.sleep(s.delay)
-        msg = SensorMessage(
-                sender_id= sender_id,
-                sender_name=sender_name,
-                data_type=data_type,
-                payload=HeartBeatPayload(
-                )
-            )
-        yield msg
-
-
-
-
-
-async def run_pub_hb(endpoint = "tcp://127.0.0.1:5551", sender_id = 0, sender_name = "sender_01", data_type = "test", *, scenarios : list[HbState]):
-    pub_opt = ZmqPubOptions(endpoint)
-    with get_publisher(pub_opt) as pub:
-        await asyncio.sleep(0.1) # wait for first setup
-        for msg in aiter_msgs_from_scenario(sender_id=sender_id, sender_name=sender_name, data_type=data_type, scenarios=scenarios):
-            log.debug(f"send information: " + msg)
-            pub.send(msg)
-            
-        
+from capstone_center.heartbeat_process import HeartbeatConfig, HeartbeatProcessor
+from capstone_center.state_store import ComponentHeartbeat, RuntimeState
 
 
 @pytest.mark.asyncio
-async def test_heart_beat_single_test():
-    endpoint = "tcp://127.0.0.1:5551"
-    scenario_1 = [
-        HbState(
-            "OK", delay=0.5
-        ),
-        HbState(
-            "OK", delay=0.5
-        ),
-        HbState(
-            "OK", delay=0.5
-        ),
-        HbState(
-            "OK", delay=0.5
-        )
-    ]
-    test_sub = ZmqSubOptions(
-        endpoint="tcp://127.0.0.1:5551",
-        topics=[""],
-        is_bind=True,
+async def test_heartbeat_process_marks_dead_after_timeout() -> None:
+    now = datetime.now()
+    state = RuntimeState()
+    state.heartbeats["c-1"] = ComponentHeartbeat(last_seen=now - timedelta(seconds=6))
+
+    proc = HeartbeatProcessor(
+        state=state,
+        state_lock=asyncio.Lock(),
+        hb_config=HeartbeatConfig(loop_time=1.0, timeout_threshold=5.0, remove_threshold=60.0),
     )
-    
-    shared_list = []
-    msg_recv_processor = MessageRecvProcessor(shared_list)
-    msg_data_processor = MessageDataProcessor(shared_list)
+    await proc.heartbeat_process(now=now, timeout_threshold=5.0, remove_threshold=60.0)
+
+    assert "c-1" in state.dead_components_set
+    assert "c-1" in state.heartbeats
 
 
-    main_process = CenterSubscriber(msg_recv_processor, msg_data_processor)
+@pytest.mark.asyncio
+async def test_heartbeat_process_removes_after_remove_threshold() -> None:
+    now = datetime.now()
+    state = RuntimeState()
+    state.heartbeats["c-2"] = ComponentHeartbeat(last_seen=now - timedelta(seconds=61))
+
+    proc = HeartbeatProcessor(
+        state=state,
+        state_lock=asyncio.Lock(),
+        hb_config=HeartbeatConfig(loop_time=1.0, timeout_threshold=5.0, remove_threshold=60.0),
+    )
+    await proc.heartbeat_process(now=now, timeout_threshold=5.0, remove_threshold=60.0)
+
+    assert "c-2" in state.dead_components_set
+    assert "c-2" not in state.heartbeats
 
 
-    
-    
-    await run_pub_hb(endpoint)
-    
-    assert True
+@pytest.mark.asyncio
+async def test_heartbeat_runner_rejects_non_positive_params() -> None:
+    proc = HeartbeatProcessor(
+        state=RuntimeState(),
+        state_lock=asyncio.Lock(),
+        hb_config=HeartbeatConfig(loop_time=1.0, timeout_threshold=5.0, remove_threshold=60.0),
+    )
+
+    with pytest.raises(ValueError):
+        await proc.heartbeat_runner(loop_time=0, timeout_threshold=5.0, remove_threshold=60.0)
 
 
+@pytest.mark.asyncio
+async def test_heartbeat_runner_propagates_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
+    proc = HeartbeatProcessor(
+        state=RuntimeState(),
+        state_lock=asyncio.Lock(),
+        hb_config=HeartbeatConfig(loop_time=1.0, timeout_threshold=5.0, remove_threshold=60.0),
+    )
+
+    async def cancel_sleep(_seconds: float) -> None:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr("capstone_center.heartbeat_process.asyncio.sleep", cancel_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        await proc.heartbeat_runner(loop_time=1.0, timeout_threshold=5.0, remove_threshold=60.0)

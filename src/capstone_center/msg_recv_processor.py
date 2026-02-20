@@ -1,37 +1,59 @@
-# src/capstone-center/msg_recv_processor.py
 import asyncio
-import msg_handler
 import logging
+
+import msg_handler
 from pydantic import ValidationError
-from capstone_center.state_store import RuntimeState
 
 from capstone_center.decorators import with_state_lock
+from capstone_center.state_store import RuntimeState
+
 
 class MessageRecvProcessor:
-    def __init__(self, state : RuntimeState, state_lock: asyncio.Lock, logger:logging.Logger|None = None):
+    def __init__(
+        self,
+        state: RuntimeState,
+        state_lock: asyncio.Lock,
+        sub_opt: msg_handler.ZmqSubOptions,
+        logger: logging.Logger | None = None,
+    ):
         self.state = state
         self.state_lock = state_lock
+        self.sub_opt = sub_opt
         self.logger = logger or logging.getLogger(__name__)
 
     async def _handle_heart_beat(self, msg: msg_handler.SensorMessage) -> None:
-        self.logger.debug(f"handling data for heart_beat from component id: {msg.sender_id}, name : {msg.sender_name}")
+        self.logger.debug(
+            "handling data for heart_beat from component id: %s, name : %s",
+            msg.sender_id,
+            msg.sender_name,
+        )
         self.state.mark_heartbeat(msg.sender_id, msg.timestamp)
-        
 
     async def _handle_sensor_status(self, msg: msg_handler.SensorMessage) -> None:
         assert isinstance(msg.payload, msg_handler.SensorPayload), (
-                f"Expected SensorPayload, got {type(msg.payload).__name__} "
-                f"(data_type={msg.data_type}, sender_id={msg.sender_id})"
-                )
+            f"Expected SensorPayload, got {type(msg.payload).__name__} "
+            f"(data_type={msg.data_type}, sender_id={msg.sender_id})"
+        )
 
-        self.logger.debug(f"handling data for sensor from component id: {msg.sender_id}, name : {msg.sender_name}")
-        self.state.update_sensor(msg.sender_id, msg.timestamp, msg.payload.isThereHuman, msg.payload.human_exist_possibility)
-
+        self.logger.debug(
+            "handling data for sensor from component id: %s, name : %s",
+            msg.sender_id,
+            msg.sender_name,
+        )
+        self.state.update_sensor(
+            msg.sender_id,
+            msg.timestamp,
+            msg.payload.isThereHuman,
+            msg.payload.human_exist_possibility,
+        )
 
     async def _handle_status(self, msg: msg_handler.SensorMessage) -> None:
-        self.logger.debug(f"handling data for compoent status from component id: {msg.sender_id}, name : {msg.sender_name}")
+        self.logger.debug(
+            "handling data for component status from component id: %s, name : %s",
+            msg.sender_id,
+            msg.sender_name,
+        )
         code, status = msg.get_status()
-
         self.state.update_status(msg.sender_id, msg.timestamp, code, status)
 
     @with_state_lock
@@ -45,19 +67,15 @@ class MessageRecvProcessor:
         await self._handle_heart_beat(msg)
         await self._handle_status(msg)
 
-
-
-    async def run_subscriber(self, sub_opt: msg_handler.ZmqSubOptions) -> None:
-        async with msg_handler.get_async_subscriber(sub_opt) as sub:
+    async def run(self) -> None:
+        async with msg_handler.get_async_subscriber(self.sub_opt) as sub:
             self.logger.info("subscriber is UP")
             async for raw in sub:
                 self.logger.debug("msg received")
                 try:
                     msg = msg_handler.SensorMessage.model_validate(raw)
-                    self.logger.debug(
-                        "payload identified as %s", type(msg.payload).__name__
-                    )
-                    
+                    self.logger.debug("payload identified as %s", type(msg.payload).__name__)
+
                     if msg.data_type == "heartbeat":
                         await self._other_msg_handler(msg)
                     elif msg.data_type == "sensor":
@@ -71,5 +89,3 @@ class MessageRecvProcessor:
                 except Exception:
                     self.logger.exception("Unexpected error while processing message")
         self.logger.info("subscriber shutting down")
-
-    
