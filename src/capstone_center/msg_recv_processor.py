@@ -5,7 +5,7 @@ import msg_handler
 from pydantic import ValidationError
 
 from capstone_center.decorators import with_state_lock
-from capstone_center.state_store import RuntimeState
+from capstone_center.state_store import RuntimeState, CoalescedUpdateSignal
 
 
 class MessageRecvProcessor:
@@ -13,12 +13,14 @@ class MessageRecvProcessor:
         self,
         state: RuntimeState,
         state_lock: asyncio.Lock,
+        signal_sensor_process :CoalescedUpdateSignal,
         sub_opt: msg_handler.ZmqSubOptions,
         logger: logging.Logger | None = None,
     ):
         self.state = state
         self.state_lock = state_lock
         self.sub_opt = sub_opt
+        self.signal_sensor_process = signal_sensor_process
         self.logger = logger or logging.getLogger(__name__)
 
     async def _handle_heart_beat(self, msg: msg_handler.SensorMessage) -> None:
@@ -82,6 +84,7 @@ class MessageRecvProcessor:
                         await self._sensor_msg_handler(msg)
                     else:
                         self.logger.warning("Unknown data_type: %s", msg.data_type)
+                    self.signal_sensor_process.publish()
                 except ValidationError:
                     self.logger.exception("Drop invalid message due to validation error")
                 except AssertionError:

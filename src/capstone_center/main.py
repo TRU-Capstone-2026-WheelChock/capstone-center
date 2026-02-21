@@ -8,7 +8,7 @@ import yaml
 
 from capstone_center.heartbeat_process import HeartbeatConfig, HeartbeatProcessor
 from capstone_center.msg_recv_processor import MessageRecvProcessor
-from capstone_center.state_store import RuntimeState
+from capstone_center.state_store import RuntimeState, CoalescedUpdateSignal
 
 
 def load_config(path: str = "config.yml") -> dict[str, Any]:
@@ -83,6 +83,7 @@ class CenterApp:
         self.recv = recv
         self.hb = hb
         self.logger = logger or logging.getLogger(__name__)
+        
 
     async def run(self) -> None:
         self.logger.info("start TaskGroup")
@@ -115,9 +116,14 @@ def main(config_path: str = "config.yml") -> None:
     sub_opt = get_opt(config)
     hb_config = build_heartbeat_config(config)
 
+    signal_sensor_process :CoalescedUpdateSignal = CoalescedUpdateSignal(name = "signal_sensor_process")
+    signal_lcd: CoalescedUpdateSignal = CoalescedUpdateSignal(name = "signal_lcd")
+    signal_motor = CoalescedUpdateSignal(logger, "sensor->motor")
+
     msg_recv_processor = MessageRecvProcessor(
         state,
         state_lock,
+        signal_sensor_process,
         sub_opt,
         logger=logger,
     )

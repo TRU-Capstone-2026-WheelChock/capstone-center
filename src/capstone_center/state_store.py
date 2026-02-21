@@ -6,9 +6,11 @@ tasks to track heartbeat, sensor presence, and status history.
 """
 from __future__ import annotations
 
+import asyncio
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
+import logging
 
 
 @dataclass(slots=True)
@@ -146,8 +148,10 @@ class RuntimeState:
 
     history_len: int = 3
 
+   
+
     # ---- Create ----
-    def ensure_sensor(self, sensor_id: str) -> None:
+    def _ensure_sensor(self, sensor_id: str) -> None:
         """Create sensor history entry if missing.
 
         Args:
@@ -156,7 +160,7 @@ class RuntimeState:
         if sensor_id not in self.sensor_histories:
             self.sensor_histories[sensor_id] = SensorHistory()
 
-    def ensure_component(self, component_id: str) -> None:
+    def _ensure_component(self, component_id: str) -> None:
         """Create heartbeat entry if missing.
 
         Args:
@@ -165,7 +169,7 @@ class RuntimeState:
         if component_id not in self.heartbeats:
             self.heartbeats[component_id] = ComponentHeartbeat()
     
-    def ensure_status(self, component_id:str) ->None:
+    def _ensure_status(self, component_id:str) ->None:
         """Create status history entry if missing.
 
         Args:
@@ -185,7 +189,7 @@ class RuntimeState:
         if component_id in self.dead_components_set:
             self.dead_components_set.discard(component_id)
 
-        self.ensure_component(component_id)
+        self._ensure_component(component_id)
         self.heartbeats[component_id].last_seen = ts
 
     def update_sensor(
@@ -203,7 +207,7 @@ class RuntimeState:
             present: Presence decision from the sensor.
             probability: Optional confidence value.
         """
-        self.ensure_sensor(sensor_id)
+        self._ensure_sensor(sensor_id)
         self.sensor_histories[sensor_id].push(
             SensorSample(ts=ts, present=present, probability=probability)
         )
@@ -223,7 +227,7 @@ class RuntimeState:
             status_code: Numeric status code.
             status: Human-readable status text.
         """
-        self.ensure_status(component_id)
+        self._ensure_status(component_id)
         self.status_history[component_id].push(
             Status(ts, status_code, status)
         )
@@ -240,3 +244,70 @@ class RuntimeState:
         """
         history = self.sensor_histories.get(sensor_id)
         return history.latest() if history else None
+
+
+    def get_alive_component(self) -> set[str]:
+        """Return component IDs currently considered alive.
+
+        Alive is defined as:
+            - present in `heartbeats`
+            - not listed in `dead_components_set`
+            - having a non-None `last_seen`
+        """
+        alive_ids = set(self.heartbeats) - self.dead_components_set
+        return {
+            component_id
+            for component_id in alive_ids
+            if self.heartbeats[component_id].last_seen is not None
+        }
+    
+    def get_alive_latest_sensor_data(self) -> dict[str, SensorSample]:
+        alive_ids = self.get_alive_component()
+        out: dict[str, SensorSample] = {}
+
+        for component_id in alive_ids:
+            sample = self.latest_sensor(component_id)
+            if sample is not None:
+                out[component_id] = sample
+
+        return out 
+    
+
+############ 
+
+
+
+
+###############  Asyncio status #########################
+
+
+class CoalescedUpdateSignal:
+    """
+    Event-based signal with overwrite logging.
+    - publish(): set event. if already set, count as overwrite.
+    - wait_next(): wait + immediate clear (safe pattern).
+    """
+
+    def __init__(self, logger: logging.Logger|None = None, name: str = "update") -> None:
+        self._event = asyncio.Event()
+        self._logger = logger or logging.getLogger(__name__)
+        self._name = name
+        self.stats_count = 0
+
+    def publish(self) -> None:
+        if self._event.is_set():
+            self.stats_count += 1
+            self._logger.warning(
+                "%s signal overwritten while pending (count=%d)",
+                self._name,
+                self.stats_count,
+            )
+        else:
+            self.stats_count = 0
+        self._event.set()
+
+    async def wait_next(self) -> None:
+        await self._event.wait()
+        # Important: clear immediately after wake-up.
+        # If a new publish() arrives during processing, it will set again.
+        self._event.clear()
