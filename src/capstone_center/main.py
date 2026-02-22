@@ -84,32 +84,25 @@ def get_pub_opt(
             config: dict[str, Any],
     *,
     endpoint: str | None = None,
-    topics: list[str] | None = None,
     is_bind: bool | None = None,
     context : zmq.asyncio.Context
 ) -> msg_handler.ZmqPubOptions:
     try:
-        endpoint_cfg = config["zmq"]["sub"]["endpoint"]
-        topics_cfg = config["zmq"]["sub"]["topics"]
+        endpoint_cfg = config["zmq"]["display"]["endpoint"]
         is_bind_cfg = config["zmq"]["sub"]["is_bind"]
     except KeyError as e:
         raise SystemExit(f"missing required config: zmq.sub.{e.args[0]}")
 
     endpoint_val = endpoint_cfg if endpoint is None else endpoint
 
-    topics_val = topics_cfg if topics is None else topics
-    if not isinstance(topics_val, list):
-        raise SystemExit("zmq.sub.topics must be list")
-    if not all(isinstance(t, str) for t in topics_val):
-        raise SystemExit("zmq.sub.topics items must be string")
-
-    is_bind_val = is_bind_cfg if is_bind is None else is_bind
+    is_bind_val = is_bind_cfg if is_bind is None else is_bind 
     if not isinstance(is_bind_val, bool):
         raise SystemExit("zmq.sub.is_bind must be bool")
     
     return msg_handler.ZmqPubOptions(
         endpoint=endpoint_val,
         context=context,
+        is_connect=not is_bind_val # opposite of bind
     )
     
 

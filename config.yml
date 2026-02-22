@@ -38,6 +38,11 @@ display:
   show_last_status_on_timeout: true
   timeout_template: "Timeout - last-status: {status}"
 
+  endpoint: "tcp://localhost:5555"
+  topics:"display"
+  
+
+
 moter:
   name : "motor"
   status :
