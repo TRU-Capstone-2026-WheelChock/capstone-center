@@ -38,9 +38,25 @@ display:
   show_last_status_on_timeout: true
   timeout_template: "Timeout - last-status: {status}"
 
+moter:
+  name : "motor"
+  status :
+    - DEAD
+    - ERROR
+    - WARN
+    - DEPLOYED
+    - DEPOLYING
+    - FOLDING
+    - FOLDED
+    - OK
+    - STARTING
+
+
 policy:
   status_priority:
     - DEAD
     - ERROR
     - WARN
     - OK
+    - STARTING
+

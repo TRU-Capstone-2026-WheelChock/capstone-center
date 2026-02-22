@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from typing import LiteralString
 from dataclasses import dataclass, field
 from datetime import datetime
 import logging
@@ -127,6 +128,11 @@ class StatusHistory:
         """Return status history as a list in insertion order."""
         return list(self.status_deque)
 
+@dataclass(slots=True)
+class LatestMotorState:
+    state : LiteralString
+
+
 @dataclass
 class RuntimeState:
     """Aggregate runtime state shared by async tasks.
@@ -144,7 +150,7 @@ class RuntimeState:
     heartbeats: dict[str, ComponentHeartbeat] = field(default_factory=dict)
     dead_components_set: set[str] = field(default_factory=set)
 
-    status_history : dict[str, StatusHistory] = field(default_factory=dict) 
+    status_history : dict[str, StatusHistory] = field(default_factory=dict)
 
     history_len: int = 3
 
