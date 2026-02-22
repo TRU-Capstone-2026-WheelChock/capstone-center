@@ -12,6 +12,7 @@ from typing import LiteralString
 from dataclasses import dataclass, field
 from datetime import datetime
 import logging
+import msg_handler
 
 
 @dataclass(slots=True)
@@ -153,6 +154,10 @@ class RuntimeState:
     status_history : dict[str, StatusHistory] = field(default_factory=dict)
 
     history_len: int = 3
+    
+    isin_override_mode: bool = False
+
+    motor_mode : str = ""
 
    
 
@@ -238,6 +243,13 @@ class RuntimeState:
             Status(ts, status_code, status)
         )
 
+
+    def set_override_mode(self, isin_override_mode : bool):
+        self.isin_override_mode = isin_override_mode
+
+    def set_motor_mode(self, motor_mode : str):
+        self.motor_mode = motor_mode
+
     # ---- Read helper ----
     def latest_sensor(self, sensor_id: str) -> SensorSample | None:
         """Return latest sensor sample for an ID.
@@ -277,6 +289,23 @@ class RuntimeState:
                 out[component_id] = sample
 
         return out 
+
+    def get_alive_latest_display_dict(self) -> dict[str, msg_handler.SensorDisplayMode] :
+        """Build a DisplayMessage using only the latest alive sensor samples."""
+        import msg_handler
+
+        alive_latest_sensor_data = self.get_alive_latest_sensor_data()
+        sensor_display_dict: dict[str, msg_handler.SensorDisplayMode] = {}
+
+        for component_id in sorted(alive_latest_sensor_data):
+            sample = alive_latest_sensor_data[component_id]
+            sensor_display_dict[component_id] = msg_handler.SensorDisplayMode(
+                sensor_name=component_id,
+                is_there_human=sample.present,
+                human_exist_possibility=sample.probability,
+            )
+
+        return sensor_display_dict
     
 
 ############ 
@@ -303,7 +332,7 @@ class CoalescedUpdateSignal:
     def publish(self) -> None:
         if self._event.is_set():
             self.stats_count += 1
-            self._logger.warning(
+            self._logger.info(
                 "%s signal overwritten while pending (count=%d)",
                 self._name,
                 self.stats_count,

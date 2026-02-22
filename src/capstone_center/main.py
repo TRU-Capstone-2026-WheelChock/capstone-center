@@ -2,6 +2,8 @@ import asyncio
 import logging
 from pathlib import Path
 from typing import Any
+import zmq
+import zmq.asyncio
 
 import msg_handler
 import yaml
@@ -10,6 +12,7 @@ from capstone_center.heartbeat_process import HeartbeatConfig, HeartbeatProcesso
 from capstone_center.msg_recv_processor import MessageRecvProcessor
 from capstone_center.state_store import RuntimeState, CoalescedUpdateSignal
 from capstone_center.sensor_information_processor import SensorInformationProcessor
+from capstone_center.display_sender_processor import DisplaySenderProcessor
 
 
 def load_config(path: str = "config.yml") -> dict[str, Any]:
@@ -47,6 +50,7 @@ def get_opt(
     endpoint: str | None = None,
     topics: list[str] | None = None,
     is_bind: bool | None = None,
+    context : zmq.asyncio.Context
 ) -> msg_handler.ZmqSubOptions:
     try:
         endpoint_cfg = config["zmq"]["sub"]["endpoint"]
@@ -71,8 +75,43 @@ def get_opt(
         endpoint=endpoint_val,
         topics=topics_val,
         is_bind=is_bind_val,
+        context=context,
+        expected_type="sensor"
     )
 
+
+def get_pub_opt(
+            config: dict[str, Any],
+    *,
+    endpoint: str | None = None,
+    topics: list[str] | None = None,
+    is_bind: bool | None = None,
+    context : zmq.asyncio.Context
+) -> msg_handler.ZmqPubOptions:
+    try:
+        endpoint_cfg = config["zmq"]["sub"]["endpoint"]
+        topics_cfg = config["zmq"]["sub"]["topics"]
+        is_bind_cfg = config["zmq"]["sub"]["is_bind"]
+    except KeyError as e:
+        raise SystemExit(f"missing required config: zmq.sub.{e.args[0]}")
+
+    endpoint_val = endpoint_cfg if endpoint is None else endpoint
+
+    topics_val = topics_cfg if topics is None else topics
+    if not isinstance(topics_val, list):
+        raise SystemExit("zmq.sub.topics must be list")
+    if not all(isinstance(t, str) for t in topics_val):
+        raise SystemExit("zmq.sub.topics items must be string")
+
+    is_bind_val = is_bind_cfg if is_bind is None else is_bind
+    if not isinstance(is_bind_val, bool):
+        raise SystemExit("zmq.sub.is_bind must be bool")
+    
+    return msg_handler.ZmqPubOptions(
+        endpoint=endpoint_val,
+        context=context,
+    )
+    
 
 class CenterApp:
     def __init__(
@@ -80,11 +119,13 @@ class CenterApp:
         recv: MessageRecvProcessor,
         hb: HeartbeatProcessor,
         sp: SensorInformationProcessor,
+        dis: DisplaySenderProcessor,
         logger: logging.Logger | None = None,
     ):
         self.recv = recv
         self.hb = hb
         self.sp = sp
+        self.dis = dis
         self.logger = logger or logging.getLogger(__name__)
         
 
@@ -93,7 +134,8 @@ class CenterApp:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(self.recv.run(), name="subscriber")
             tg.create_task(self.hb.run(), name="heartbeat-runner")
-            tg.create_task(self.sp.run(), name="sensor_processor")
+            tg.create_task(self.sp.run(), name="sensor-processor")
+            tg.create_task(self.dis.run(), name = "display-processor")
 
 
 def build_heartbeat_config(config: dict[str, Any]) -> HeartbeatConfig:
@@ -117,7 +159,10 @@ def main(config_path: str = "config.yml") -> None:
     state = RuntimeState()
     state_lock = asyncio.Lock()
 
-    sub_opt = get_opt(config)
+    
+    ctx = zmq.asyncio.Context()
+
+    sub_opt = get_opt(config, context=ctx)
     hb_config = build_heartbeat_config(config)
 
     signal_sensor_process :CoalescedUpdateSignal = CoalescedUpdateSignal(name = "signal_sensor_process")
@@ -129,6 +174,7 @@ def main(config_path: str = "config.yml") -> None:
         state_lock,
         signal_sensor_process,
         sub_opt,
+        context=ctx,
         logger=logger,
     )
     heartbeat_processor = HeartbeatProcessor(
@@ -144,7 +190,15 @@ def main(config_path: str = "config.yml") -> None:
         signal_sensor_process=signal_sensor_process
     )
 
-    main_process = CenterApp(msg_recv_processor, heartbeat_processor, logger=logger)
+    display_info_sender = DisplaySenderProcessor(
+        state,
+        state_lock,
+        signal_sensor_process,
+        pub_opt=get_pub_opt(config, context=ctx),
+        logger=logger
+    )
+
+    main_process = CenterApp(msg_recv_processor, heartbeat_processor, sensor_info_processor, display_info_sender, logger=logger)
     asyncio.run(main_process.run())
 
 
