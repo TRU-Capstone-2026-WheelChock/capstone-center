@@ -9,6 +9,7 @@ import yaml
 from capstone_center.heartbeat_process import HeartbeatConfig, HeartbeatProcessor
 from capstone_center.msg_recv_processor import MessageRecvProcessor
 from capstone_center.state_store import RuntimeState, CoalescedUpdateSignal
+from capstone_center.sensor_information_processor import SensorInformationProcessor
 
 
 def load_config(path: str = "config.yml") -> dict[str, Any]:
@@ -78,10 +79,12 @@ class CenterApp:
         self,
         recv: MessageRecvProcessor,
         hb: HeartbeatProcessor,
+        sp: SensorInformationProcessor,
         logger: logging.Logger | None = None,
     ):
         self.recv = recv
         self.hb = hb
+        self.sp = sp
         self.logger = logger or logging.getLogger(__name__)
         
 
@@ -90,6 +93,7 @@ class CenterApp:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(self.recv.run(), name="subscriber")
             tg.create_task(self.hb.run(), name="heartbeat-runner")
+            tg.create_task(self.sp.run(), name="sensor_processor")
 
 
 def build_heartbeat_config(config: dict[str, Any]) -> HeartbeatConfig:
@@ -132,6 +136,12 @@ def main(config_path: str = "config.yml") -> None:
         state_lock,
         hb_config=hb_config,
         logger=logger,
+    )
+
+    sensor_info_processor = SensorInformationProcessor(
+        state=state,
+        state_lock=state_lock,
+        signal_sensor_process=signal_sensor_process
     )
 
     main_process = CenterApp(msg_recv_processor, heartbeat_processor, logger=logger)
