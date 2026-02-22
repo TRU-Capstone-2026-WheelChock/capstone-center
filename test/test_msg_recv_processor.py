@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 import capstone_center.msg_recv_processor as target
 from capstone_center.msg_recv_processor import MessageRecvProcessor
-from capstone_center.state_store import RuntimeState
+from capstone_center.state_store import RuntimeState, CoalescedUpdateSignal
 
 
 class _AsyncIter:
@@ -46,7 +46,7 @@ def _patch_model_validate(monkeypatch: pytest.MonkeyPatch, validate_fn):
 
 @pytest.mark.asyncio
 async def test_run_dispatches_heartbeat_to_other_handler(monkeypatch: pytest.MonkeyPatch):
-    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(), sub_opt=object())
+    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock()
 
@@ -68,7 +68,7 @@ async def test_run_dispatches_heartbeat_to_other_handler(monkeypatch: pytest.Mon
 
 @pytest.mark.asyncio
 async def test_run_dispatches_sensor_to_sensor_handler(monkeypatch: pytest.MonkeyPatch):
-    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(), sub_opt=object())
+    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock()
 
@@ -90,7 +90,7 @@ async def test_run_dispatches_sensor_to_sensor_handler(monkeypatch: pytest.Monke
 
 @pytest.mark.asyncio
 async def test_run_ignores_unknown_data_type(monkeypatch: pytest.MonkeyPatch):
-    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(), sub_opt=object())
+    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock()
 
@@ -112,7 +112,7 @@ async def test_run_ignores_unknown_data_type(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.asyncio
 async def test_run_continues_after_validation_error(monkeypatch: pytest.MonkeyPatch):
-    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(), sub_opt=object())
+    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock()
 
@@ -140,7 +140,7 @@ async def test_run_continues_after_validation_error(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 async def test_run_continues_after_assertion_error(monkeypatch: pytest.MonkeyPatch):
-    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(), sub_opt=object())
+    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock(side_effect=AssertionError("boom"))
 
@@ -167,7 +167,7 @@ async def test_run_continues_after_assertion_error(monkeypatch: pytest.MonkeyPat
 async def test_run_uses_sub_opt_for_subscriber(monkeypatch: pytest.MonkeyPatch):
     sub_opt = object()
     captured = []
-    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(), sub_opt=sub_opt)
+    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=sub_opt)
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock()
 

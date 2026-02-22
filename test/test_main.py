@@ -111,8 +111,8 @@ def test_build_heartbeat_config_reads_required_runtime_keys() -> None:
 async def test_center_app_run_starts_recv_and_heartbeat() -> None:
     recv = SimpleNamespace(run=AsyncMock(return_value=None))
     hb = SimpleNamespace(run=AsyncMock(return_value=None))
-
-    app = CenterApp(recv=recv, hb=hb)
+    sp = SimpleNamespace(run=AsyncMock(return_value=None))
+    app = CenterApp(recv=recv, hb=hb, sp = sp)
 
     await app.run()
 

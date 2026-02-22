@@ -32,7 +32,7 @@ class SensorInformationProcessor():
 
         status_counts = Counter(v.present for v in alive_latest_sensor_data.values())
 
-        return status_counts[True] > status_counts[False]:
+        return status_counts[True] > status_counts[False]
             
             
                 
