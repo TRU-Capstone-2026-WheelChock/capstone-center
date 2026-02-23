@@ -81,15 +81,14 @@ class MotorSenderProcessor:
         async with msg_handler.get_async_publisher(self.pub_opt) as pub:
             self.logger.info("motor publisher is UP")
             while True:
-                triggered = False
                 try:
                     # Normal path: wake up immediately when sensor processing publishes an update.
-                    triggered = await asyncio.wait_for(self.signal_motor_process.wait_next(), timeout=self.loop_time)
+                    await asyncio.wait_for(self.signal_motor_process.wait_next(), timeout=self.loop_time)
+                    triggered = True
                 except asyncio.TimeoutError:
-                    """
-                    Timeout path is intentional. We periodically re-send the latest command so a
-                    late subscriber can catch up even if it missed earlier PUB messages.
-                    """
+                    # Timeout path is intentional. We periodically re-send the latest
+                    # command so a late subscriber can catch up even if it missed
+                    # earlier PUB messages.
                     triggered = False
 
                 reason = "event" if triggered else "periodic"

@@ -200,7 +200,6 @@ def main(config_path: str = "config.yml") -> None:
         state_lock,
         signal_sensor_process,
         sub_opt,
-        context=ctx,
         logger=logger,
     )
     heartbeat_processor = HeartbeatProcessor(
@@ -215,13 +214,16 @@ def main(config_path: str = "config.yml") -> None:
         state_lock=state_lock,
         derived_state=derived_state,
         derived_state_lock=derived_state_lock,
-        signal_sensor_process=signal_sensor_process
+        signal_sensor_process=signal_sensor_process,
+        signal_display_process=signal_lcd,
+        signal_motor_process=signal_motor,
+        logger=logger,
     )
 
     display_info_sender = DisplaySenderProcessor(
         state,
         state_lock,
-        signal_sensor_process,
+        signal_lcd,
         pub_opt=get_disp_pub_opt(config, context=ctx),
         logger=logger
     )

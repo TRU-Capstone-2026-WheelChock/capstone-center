@@ -71,6 +71,12 @@ class MessageRecvProcessor:
         await self._handle_heart_beat(msg)
         await self._handle_status(msg)
 
+    
+    @with_state_lock
+    async def _override_button(self, msg: msg_handler.SensorMessage)->None:
+        pass
+
+
     async def run(self) -> None:
         async with msg_handler.get_async_subscriber(self.sub_opt) as sub:
             self.logger.info("subscriber is UP")
@@ -84,6 +90,8 @@ class MessageRecvProcessor:
                         await self._other_msg_handler(msg)
                     elif msg.data_type == "sensor":
                         await self._sensor_msg_handler(msg)
+                    elif msg.data_type == "override_button":
+                        await self._override_button(msg)
                     else:
                         self.logger.warning("Unknown data_type: %s", msg.data_type)
                     self.signal_sensor_process.publish()

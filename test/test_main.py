@@ -3,8 +3,16 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+import zmq.asyncio
 
-from capstone_center.main import CenterApp, build_heartbeat_config, get_opt, load_config
+from capstone_center.main import (
+    CenterApp,
+    build_heartbeat_config,
+    get_disp_pub_opt,
+    get_motor_pub_opt,
+    get_opt,
+    load_config,
+)
 
 
 def test_load_config_reads_yaml(tmp_path: Path) -> None:
@@ -36,6 +44,7 @@ runtime:
 
 
 def test_get_opt_reads_values_from_config() -> None:
+    ctx = zmq.asyncio.Context.instance()
     cfg = {
         "zmq": {
             "sub": {
@@ -46,7 +55,7 @@ def test_get_opt_reads_values_from_config() -> None:
         }
     }
 
-    opt = get_opt(cfg)
+    opt = get_opt(cfg, context=ctx)
 
     assert opt.endpoint == "tcp://127.0.0.1:6000"
     assert opt.topics == ["sensor", "heartbeat"]
@@ -54,6 +63,7 @@ def test_get_opt_reads_values_from_config() -> None:
 
 
 def test_get_opt_accepts_override_args() -> None:
+    ctx = zmq.asyncio.Context.instance()
     cfg = {
         "zmq": {
             "sub": {
@@ -69,6 +79,7 @@ def test_get_opt_accepts_override_args() -> None:
         endpoint="tcp://127.0.0.1:7000",
         topics=["all"],
         is_bind=False,
+        context=ctx,
     )
 
     assert opt.endpoint == "tcp://127.0.0.1:7000"
@@ -77,6 +88,7 @@ def test_get_opt_accepts_override_args() -> None:
 
 
 def test_get_opt_fails_if_topics_is_not_list() -> None:
+    ctx = zmq.asyncio.Context.instance()
     cfg = {
         "zmq": {
             "sub": {
@@ -88,7 +100,33 @@ def test_get_opt_fails_if_topics_is_not_list() -> None:
     }
 
     with pytest.raises(SystemExit, match="topics must be list"):
-        get_opt(cfg)
+        get_opt(cfg, context=ctx)
+
+
+def test_get_disp_pub_opt_reads_display_endpoint() -> None:
+    ctx = zmq.asyncio.Context.instance()
+    cfg = {
+        "display": {"endpoint": "tcp://127.0.0.1:7001"},
+        "zmq": {"sub": {"is_bind": True}},
+    }
+
+    opt = get_disp_pub_opt(cfg, context=ctx)
+
+    assert opt.endpoint == "tcp://127.0.0.1:7001"
+    assert opt.is_connect is False
+
+
+def test_get_motor_pub_opt_reads_motor_endpoint() -> None:
+    ctx = zmq.asyncio.Context.instance()
+    cfg = {
+        "motor": {"endpoint": "tcp://127.0.0.1:7002"},
+        "zmq": {"sub": {"is_bind": True}},
+    }
+
+    opt = get_motor_pub_opt(cfg, context=ctx)
+
+    assert opt.endpoint == "tcp://127.0.0.1:7002"
+    assert opt.is_connect is False
 
 
 def test_build_heartbeat_config_reads_required_runtime_keys() -> None:
@@ -112,9 +150,14 @@ async def test_center_app_run_starts_recv_and_heartbeat() -> None:
     recv = SimpleNamespace(run=AsyncMock(return_value=None))
     hb = SimpleNamespace(run=AsyncMock(return_value=None))
     sp = SimpleNamespace(run=AsyncMock(return_value=None))
-    app = CenterApp(recv=recv, hb=hb, sp = sp)
+    dis = SimpleNamespace(run=AsyncMock(return_value=None))
+    motor = SimpleNamespace(run=AsyncMock(return_value=None))
+    app = CenterApp(recv=recv, hb=hb, sp=sp, dis=dis, motor=motor)
 
     await app.run()
 
     recv.run.assert_awaited_once_with()
     hb.run.assert_awaited_once_with()
+    sp.run.assert_awaited_once_with()
+    dis.run.assert_awaited_once_with()
+    motor.run.assert_awaited_once_with()
