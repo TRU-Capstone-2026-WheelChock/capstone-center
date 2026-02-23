@@ -157,7 +157,7 @@ class RuntimeState:
     
     isin_override_mode: bool = False
 
-    motor_mode : str = ""
+    motor_mode : msg_handler.MotorState = msg_handler.MotorState.STARTING
 
    
 
@@ -247,7 +247,7 @@ class RuntimeState:
     def set_override_mode(self, isin_override_mode : bool):
         self.isin_override_mode = isin_override_mode
 
-    def set_motor_mode(self, motor_mode : str):
+    def set_motor_mode(self, motor_mode : msg_handler.MotorState):
         self.motor_mode = motor_mode
 
     # ---- Read helper ----
@@ -262,7 +262,6 @@ class RuntimeState:
         """
         history = self.sensor_histories.get(sensor_id)
         return history.latest() if history else None
-
 
     def get_alive_component(self) -> set[str]:
         """Return component IDs currently considered alive.
@@ -307,6 +306,25 @@ class RuntimeState:
 
         return sensor_display_dict
     
+@dataclass
+class DerivedState:
+    latest_is_human : bool = False
+    last_updated_at : datetime | None = None
+    last_changed_at : datetime | None = None
+
+    # debug  service
+    revision : int = 0
+
+    def update_is_human(self, value: bool, now: datetime) -> None:
+
+        changed : bool =self.latest_is_human != value
+        self.latest_is_human = value
+        self.last_updated_at = now
+        if changed:
+            self.last_changed_at = now
+
+        self.revision += 1
+
 
 ############ 
 

@@ -10,9 +10,10 @@ import yaml
 
 from capstone_center.heartbeat_process import HeartbeatConfig, HeartbeatProcessor
 from capstone_center.msg_recv_processor import MessageRecvProcessor
-from capstone_center.state_store import RuntimeState, CoalescedUpdateSignal
+from capstone_center.state_store import RuntimeState, DerivedState, CoalescedUpdateSignal
 from capstone_center.sensor_information_processor import SensorInformationProcessor
 from capstone_center.display_sender_processor import DisplaySenderProcessor
+from capstone_center.motor_sender_processor import MotorSenderProcessor
 
 
 def load_config(path: str = "config.yml") -> dict[str, Any]:
@@ -80,31 +81,56 @@ def get_opt(
     )
 
 
-def get_pub_opt(
-            config: dict[str, Any],
+def get_disp_pub_opt(
+    config: dict[str, Any],
     *,
     endpoint: str | None = None,
     is_bind: bool | None = None,
-    context : zmq.asyncio.Context
+    context: zmq.asyncio.Context,
 ) -> msg_handler.ZmqPubOptions:
     try:
-        endpoint_cfg = config["zmq"]["display"]["endpoint"]
+        endpoint_cfg = config["display"]["endpoint"]
         is_bind_cfg = config["zmq"]["sub"]["is_bind"]
     except KeyError as e:
-        raise SystemExit(f"missing required config: zmq.sub.{e.args[0]}")
+        raise SystemExit(f"missing required config for display publisher: {e.args[0]}")
 
     endpoint_val = endpoint_cfg if endpoint is None else endpoint
 
-    is_bind_val = is_bind_cfg if is_bind is None else is_bind 
+    is_bind_val = is_bind_cfg if is_bind is None else is_bind
     if not isinstance(is_bind_val, bool):
         raise SystemExit("zmq.sub.is_bind must be bool")
-    
+
     return msg_handler.ZmqPubOptions(
         endpoint=endpoint_val,
         context=context,
-        is_connect=not is_bind_val # opposite of bind
+        is_connect=not is_bind_val,  # opposite of bind
     )
-    
+
+
+def get_motor_pub_opt(
+    config: dict[str, Any],
+    *,
+    endpoint: str | None = None,
+    is_bind: bool | None = None,
+    context: zmq.asyncio.Context,
+) -> msg_handler.ZmqPubOptions:
+    try:
+        endpoint_cfg = config["motor"]["endpoint"]
+        is_bind_cfg = config["zmq"]["sub"]["is_bind"]
+    except KeyError as e:
+        raise SystemExit(f"missing required config for motor publisher: {e.args[0]}")
+
+    endpoint_val = endpoint_cfg if endpoint is None else endpoint
+
+    is_bind_val = is_bind_cfg if is_bind is None else is_bind
+    if not isinstance(is_bind_val, bool):
+        raise SystemExit("zmq.sub.is_bind must be bool")
+
+    return msg_handler.ZmqPubOptions(
+        endpoint=endpoint_val,
+        context=context,
+        is_connect=not is_bind_val,  # opposite of bind
+    )
 
 class CenterApp:
     def __init__(
@@ -113,12 +139,14 @@ class CenterApp:
         hb: HeartbeatProcessor,
         sp: SensorInformationProcessor,
         dis: DisplaySenderProcessor,
+        motor: MotorSenderProcessor,
         logger: logging.Logger | None = None,
     ):
         self.recv = recv
         self.hb = hb
         self.sp = sp
         self.dis = dis
+        self.motor = motor
         self.logger = logger or logging.getLogger(__name__)
         
 
@@ -129,6 +157,7 @@ class CenterApp:
             tg.create_task(self.hb.run(), name="heartbeat-runner")
             tg.create_task(self.sp.run(), name="sensor-processor")
             tg.create_task(self.dis.run(), name = "display-processor")
+            tg.create_task(self.motor.run(), name="motor-processor")
 
 
 def build_heartbeat_config(config: dict[str, Any]) -> HeartbeatConfig:
@@ -151,6 +180,10 @@ def main(config_path: str = "config.yml") -> None:
 
     state = RuntimeState()
     state_lock = asyncio.Lock()
+
+    
+    derived_state = DerivedState()
+    derived_state_lock = asyncio.Lock()
 
     
     ctx = zmq.asyncio.Context()
@@ -180,6 +213,8 @@ def main(config_path: str = "config.yml") -> None:
     sensor_info_processor = SensorInformationProcessor(
         state=state,
         state_lock=state_lock,
+        derived_state=derived_state,
+        derived_state_lock=derived_state_lock,
         signal_sensor_process=signal_sensor_process
     )
 
@@ -187,11 +222,29 @@ def main(config_path: str = "config.yml") -> None:
         state,
         state_lock,
         signal_sensor_process,
-        pub_opt=get_pub_opt(config, context=ctx),
+        pub_opt=get_disp_pub_opt(config, context=ctx),
         logger=logger
     )
 
-    main_process = CenterApp(msg_recv_processor, heartbeat_processor, sensor_info_processor, display_info_sender, logger=logger)
+    motor_info_sender = MotorSenderProcessor(
+        state=state,
+        state_lock=state_lock,
+        derived_state=derived_state,
+        derived_state_lock=derived_state_lock,
+        signal_motor_process=signal_motor,
+        pub_opt=get_motor_pub_opt(config, context=ctx),
+        logger=logger,
+        loop_time=float(config["motor"].get("looptime", 10.0)),
+    )
+
+    main_process = CenterApp(
+        msg_recv_processor,
+        heartbeat_processor,
+        sensor_info_processor,
+        display_info_sender,
+        motor_info_sender,
+        logger=logger,
+    )
     asyncio.run(main_process.run())
 
 

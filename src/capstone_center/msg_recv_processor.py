@@ -17,14 +17,12 @@ class MessageRecvProcessor:
         state_lock: asyncio.Lock,
         signal_sensor_process :CoalescedUpdateSignal,
         sub_opt: msg_handler.ZmqSubOptions,
-        context : Context,
         logger: logging.Logger | None = None,
     ):
         self.state = state
         self.state_lock = state_lock
         self.sub_opt = sub_opt
         self.signal_sensor_process = signal_sensor_process
-        self.context = context
         self.logger = logger or logging.getLogger(__name__)
 
     async def _handle_heart_beat(self, msg: msg_handler.SensorMessage) -> None:

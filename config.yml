@@ -39,22 +39,28 @@ display:
   timeout_template: "Timeout - last-status: {status}"
 
   endpoint: "tcp://localhost:5555"
-  topics:"display"
+  topics: "display"
   
 
 
-moter:
-  name : "motor"
-  status :
-    - DEAD
-    - ERROR
-    - WARN
-    - DEPLOYED
-    - DEPOLYING
-    - FOLDING
-    - FOLDED
-    - OK
-    - STARTING
+motor:
+  name: motor
+  status:
+    DEAD: null
+    ERROR: null
+    WARN: null
+    DEPLOYED: true
+    DEPLOYING: true
+    FOLDING: false
+    FOLDED: false
+    OK: null
+    STARTING: null
+
+  looptime : 10.0
+  endpoint: "tcp://localhost:5555"
+  topics: "motor"
+
+
 
 
 policy:
