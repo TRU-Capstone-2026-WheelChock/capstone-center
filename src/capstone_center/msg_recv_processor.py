@@ -60,6 +60,19 @@ class MessageRecvProcessor:
         code, status = msg.get_status()
         self.state.update_status(msg.sender_id, msg.timestamp, code, status)
 
+    async def _handle_override(self, msg: msg_handler.SensorMessage)->None:
+        if not isinstance(msg.payload, msg_handler.schemas.HeartBeatPayload):
+            raise AssertionError("Unacceptable Message type")
+
+        isin_override = False
+
+
+        if msg.payload.status == "override":
+            isin_override = True
+
+        self.state.set_override_mode(isin_override)
+            
+
     @with_state_lock
     async def _sensor_msg_handler(self, msg: msg_handler.SensorMessage) -> None:
         await self._handle_heart_beat(msg)
@@ -74,7 +87,10 @@ class MessageRecvProcessor:
     
     @with_state_lock
     async def _override_button(self, msg: msg_handler.SensorMessage)->None:
-        pass
+        await self._handle_heart_beat(msg)
+        await self._handle_status(msg)
+        await self._handle_override(msg)
+
 
 
     async def run(self) -> None:
@@ -90,7 +106,7 @@ class MessageRecvProcessor:
                         await self._other_msg_handler(msg)
                     elif msg.data_type == "sensor":
                         await self._sensor_msg_handler(msg)
-                    elif msg.data_type == "override_button":
+                    elif msg.data_type == msg_handler.GenericMessageDatatype.OVERRIDE_BUTTON:
                         await self._override_button(msg)
                     else:
                         self.logger.warning("Unknown data_type: %s", msg.data_type)

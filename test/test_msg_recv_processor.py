@@ -89,6 +89,35 @@ async def test_run_dispatches_sensor_to_sensor_handler(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
+async def test_run_dispatches_override_button_to_override_handler(monkeypatch: pytest.MonkeyPatch):
+    p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(), CoalescedUpdateSignal(), sub_opt=object())
+    p._other_msg_handler = AsyncMock()
+    p._sensor_msg_handler = AsyncMock()
+    p._override_button = AsyncMock()
+
+    monkeypatch.setattr(
+        target.msg_handler,
+        "get_async_subscriber",
+        _subscriber_factory([{"raw": 1}]),
+    )
+    monkeypatch.setattr(
+        target.msg_handler,
+        "GenericMessageDatatype",
+        SimpleNamespace(OVERRIDE_BUTTON="override_button"),
+    )
+    _patch_model_validate(
+        monkeypatch,
+        lambda _raw: SimpleNamespace(data_type="override_button", payload=object()),
+    )
+
+    await p.run()
+
+    p._override_button.assert_awaited_once()
+    p._other_msg_handler.assert_not_awaited()
+    p._sensor_msg_handler.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_run_ignores_unknown_data_type(monkeypatch: pytest.MonkeyPatch):
     p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
@@ -161,6 +190,29 @@ async def test_run_continues_after_assertion_error(monkeypatch: pytest.MonkeyPat
 
     p._sensor_msg_handler.assert_awaited_once()
     p._other_msg_handler.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_override_sets_override_mode_true_for_override_status() -> None:
+    state = RuntimeState()
+    p = MessageRecvProcessor(state, asyncio.Lock(), CoalescedUpdateSignal(), sub_opt=object())
+    payload = target.msg_handler.schemas.HeartBeatPayload(status="override", status_code=200)
+
+    await p._handle_override(SimpleNamespace(payload=payload))
+
+    assert state.isin_override_mode is True
+
+
+@pytest.mark.asyncio
+async def test_handle_override_sets_override_mode_false_for_non_override_status() -> None:
+    state = RuntimeState()
+    state.set_override_mode(True)
+    p = MessageRecvProcessor(state, asyncio.Lock(), CoalescedUpdateSignal(), sub_opt=object())
+    payload = target.msg_handler.schemas.HeartBeatPayload(status="active", status_code=200)
+
+    await p._handle_override(SimpleNamespace(payload=payload))
+
+    assert state.isin_override_mode is False
 
 
 @pytest.mark.asyncio
