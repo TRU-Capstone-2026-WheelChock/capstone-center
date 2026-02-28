@@ -1,0 +1,42 @@
+services:
+  center:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        USERNAME: dev
+        UID: 1000
+        GID: 1000
+    working_dir: /app
+    volumes:
+      - .:/app:cached
+      - poetry-venv:/app/.venv
+    command: bash -lc "poetry run python test/visual_harness/run_center.py"
+
+  visual:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        USERNAME: dev
+        UID: 1000
+        GID: 1000
+    working_dir: /app
+    depends_on:
+      - center
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app:cached
+      - poetry-venv:/app/.venv
+    command: >
+      bash -lc
+      "poetry run python test/visual_harness/visual_harness.py
+      --host 0.0.0.0
+      --port 8080
+      --sensor-endpoint tcp://center:5555
+      --display-endpoint tcp://center:5556
+      --motor-endpoint tcp://center:5557"
+
+volumes:
+  poetry-venv:

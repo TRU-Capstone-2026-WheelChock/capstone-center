@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Center Visual Harness</title>
+    <style>
+      :root {
+        --bg: #f4f7fb;
+        --card: #ffffff;
+        --text: #14213d;
+        --subtle: #5c677d;
+        --line: #dbe4ee;
+        --accent: #0077b6;
+        --ok: #1a936f;
+        --off: #6c757d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at 15% 20%, #edf4ff, transparent 40%),
+          radial-gradient(circle at 85% 10%, #e9fbf1, transparent 35%), var(--bg);
+      }
+
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+      }
+
+      h1 {
+        margin: 0 0 4px;
+        font-size: 1.6rem;
+      }
+
+      p {
+        margin: 0;
+        color: var(--subtle);
+      }
+
+      .grid {
+        margin-top: 16px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+      }
+
+      .sensor-row {
+        display: grid;
+        gap: 10px;
+      }
+
+      .sensor-control {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+
+      .sensor-label {
+        font-weight: 600;
+      }
+
+      .radio-group label {
+        margin-left: 8px;
+        margin-right: 6px;
+      }
+
+      .state-line {
+        display: flex;
+        gap: 10px;
+        margin: 6px 0;
+        font-size: 0.95rem;
+      }
+
+      .state-key {
+        width: 220px;
+        color: var(--subtle);
+      }
+
+      .pill {
+        border-radius: 999px;
+        padding: 2px 9px;
+        color: #fff;
+        font-size: 0.85rem;
+      }
+
+      .pill.ok {
+        background: var(--ok);
+      }
+
+      .pill.off {
+        background: var(--off);
+      }
+
+      pre {
+        margin: 0;
+        padding: 12px;
+        border-radius: 10px;
+        background: #0f172a;
+        color: #d9f0ff;
+        min-height: 140px;
+        overflow: auto;
+        font-size: 12px;
+      }
+
+      .section-title {
+        margin: 0 0 8px;
+        font-weight: 700;
+        color: var(--accent);
+      }
+
+      @media (max-width: 680px) {
+        .state-line {
+          display: block;
+        }
+
+        .state-key {
+          width: auto;
+          margin-bottom: 2px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Center Visual Harness</h1>
+      <p>Input (3 sensors), inferred internal state, and latest display/motor commands.</p>
+
+      <div class="grid">
+        <section class="card">
+          <h2 class="section-title">Input: Sensors</h2>
+          <div class="sensor-row" id="sensorControls"></div>
+        </section>
+
+        <section class="card">
+          <h2 class="section-title">Internal State (from Display message)</h2>
+          <div id="internalState"></div>
+        </section>
+
+        <section class="card">
+          <h2 class="section-title">Output: Display last command (raw JSON)</h2>
+          <pre id="displayRaw">(waiting)</pre>
+        </section>
+
+        <section class="card">
+          <h2 class="section-title">Output: Motor last command (raw JSON)</h2>
+          <pre id="motorRaw">(waiting)</pre>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const sensorIds = ["sensor_1", "sensor_2", "sensor_3"];
+      const sensorState = { sensor_1: false, sensor_2: false, sensor_3: false };
+
+      function renderSensorControls() {
+        const root = document.getElementById("sensorControls");
+        root.innerHTML = "";
+        sensorIds.forEach((sensorId, index) => {
+          const container = document.createElement("div");
+          container.className = "sensor-control";
+          container.innerHTML = `
+            <div class="sensor-label">Sensor ${index + 1}</div>
+            <div class="radio-group">
+              <label>
+                <input type="radio" name="${sensorId}" value="on" ${sensorState[sensorId] ? "checked" : ""}>
+                ON
+              </label>
+              <label>
+                <input type="radio" name="${sensorId}" value="off" ${!sensorState[sensorId] ? "checked" : ""}>
+                OFF
+              </label>
+            </div>
+          `;
+          root.appendChild(container);
+        });
+
+        sensorIds.forEach((sensorId) => {
+          document.querySelectorAll(`input[name="${sensorId}"]`).forEach((input) => {
+            input.addEventListener("change", () => {
+              sensorState[sensorId] = input.value === "on";
+              pushSensorState();
+            });
+          });
+        });
+      }
+
+      async function pushSensorState() {
+        try {
+          await fetch("/api/sensors", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sensorState),
+          });
+        } catch (_err) {
+          // no-op
+        }
+      }
+
+      function stateLine(key, value) {
+        return `
+          <div class="state-line">
+            <div class="state-key">${key}</div>
+            <div>${value}</div>
+          </div>
+        `;
+      }
+
+      function asPill(value) {
+        return `<span class="pill ${value ? "ok" : "off"}">${value ? "ON" : "OFF"}</span>`;
+      }
+
+      function renderInternalState(data) {
+        const internal = data.internal_state || {};
+        const sensorInputs = data.sensor_inputs || {};
+        const root = document.getElementById("internalState");
+
+        root.innerHTML = [
+          stateLine("Input Sensor 1", asPill(Boolean(sensorInputs.sensor_1))),
+          stateLine("Input Sensor 2", asPill(Boolean(sensorInputs.sensor_2))),
+          stateLine("Input Sensor 3", asPill(Boolean(sensorInputs.sensor_3))),
+          stateLine("Override Mode", String(internal.is_override_mode)),
+          stateLine("Display Motor Mode", String(internal.motor_mode)),
+          stateLine("Majority Human", String(internal.majority_human_from_display)),
+          stateLine("Display Received At", String(data.display_last_command_received_at)),
+          stateLine("Motor Received At", String(data.motor_last_command_received_at)),
+        ].join("");
+      }
+
+      function renderOutputs(data) {
+        document.getElementById("displayRaw").textContent =
+          data.display_last_command_raw_json || "(waiting)";
+        document.getElementById("motorRaw").textContent =
+          data.motor_last_command_raw_json || "(waiting)";
+      }
+
+      async function refresh() {
+        try {
+          const res = await fetch("/api/state");
+          const data = await res.json();
+          renderInternalState(data);
+          renderOutputs(data);
+        } catch (_err) {
+          // no-op
+        }
+      }
+
+      renderSensorControls();
+      pushSensorState();
+      refresh();
+      setInterval(refresh, 600);
+    </script>
+  </body>
+</html>
