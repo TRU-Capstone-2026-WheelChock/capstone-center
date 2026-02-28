@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime
 
 import msg_handler
 from pydantic import ValidationError
@@ -31,7 +32,8 @@ class MessageRecvProcessor:
             msg.sender_id,
             msg.sender_name,
         )
-        self.state.mark_heartbeat(msg.sender_id, msg.timestamp)
+        # Use receiver-side time to avoid sender timestamp precision/clock skew issues.
+        self.state.mark_heartbeat(msg.sender_id, datetime.now())
 
     async def _handle_sensor_status(self, msg: msg_handler.SensorMessage) -> None:
         assert isinstance(msg.payload, msg_handler.SensorPayload), (

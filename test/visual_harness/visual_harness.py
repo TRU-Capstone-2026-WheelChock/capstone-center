@@ -15,6 +15,9 @@ import zmq
 
 LOGGER = logging.getLogger("visual_harness")
 SENSOR_IDS = ("sensor_1", "sensor_2", "sensor_3")
+OVERRIDE_INPUT_KEY = "override"
+OVERRIDE_SENDER_ID = "override_1"
+OVERRIDE_DATA_TYPE = "override_button"
 
 
 def _unwrap_topic_prefixed_payload(raw_msg: str) -> str:
@@ -31,7 +34,10 @@ class SharedState:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self.sensor_inputs: dict[str, bool] = {sensor_id: False for sensor_id in SENSOR_IDS}
+        self.sensor_connected: dict[str, bool] = {sensor_id: True for sensor_id in SENSOR_IDS}
+        self.override_input: bool = False
         self.sequences: dict[str, int] = {sensor_id: 0 for sensor_id in SENSOR_IDS}
+        self.sequences[OVERRIDE_SENDER_ID] = 0
 
         self.last_display_raw: str | None = None
         self.last_display_obj: dict[str, Any] | None = None
@@ -48,6 +54,22 @@ class SharedState:
     def get_sensor_inputs(self) -> dict[str, bool]:
         with self._lock:
             return dict(self.sensor_inputs)
+
+    def set_sensor_connected(self, sensor_id: str, connected: bool) -> None:
+        with self._lock:
+            self.sensor_connected[sensor_id] = connected
+
+    def get_sensor_connected(self) -> dict[str, bool]:
+        with self._lock:
+            return dict(self.sensor_connected)
+
+    def set_override(self, value: bool) -> None:
+        with self._lock:
+            self.override_input = value
+
+    def get_override(self) -> bool:
+        with self._lock:
+            return self.override_input
 
     def bump_sequence(self, sensor_id: str) -> int:
         with self._lock:
@@ -69,6 +91,8 @@ class SharedState:
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             sensor_inputs = dict(self.sensor_inputs)
+            sensor_connected = dict(self.sensor_connected)
+            override_input = self.override_input
             display_obj = self.last_display_obj
             motor_obj = self.last_motor_obj
 
@@ -91,6 +115,8 @@ class SharedState:
 
             return {
                 "sensor_inputs": sensor_inputs,
+                "sensor_connected": sensor_connected,
+                "override_input": override_input,
                 "internal_state": internal_state,
                 "display_last_command_raw_json": self.last_display_raw,
                 "display_last_command_received_at": self.last_display_received_at,
@@ -129,7 +155,10 @@ class SensorPublisherThread(threading.Thread):
         try:
             while not self.stop_event.is_set():
                 snapshot = self.shared_state.get_sensor_inputs()
+                connected_snapshot = self.shared_state.get_sensor_connected()
                 for sensor_id, is_on in snapshot.items():
+                    if not connected_snapshot.get(sensor_id, True):
+                        continue
                     sequence_no = self.shared_state.bump_sequence(sensor_id)
                     msg = msg_handler.SensorMessage(
                         sender_id=sensor_id,
@@ -144,6 +173,21 @@ class SensorPublisherThread(threading.Thread):
                         ),
                     )
                     socket.send_string(msg.model_dump_json())
+
+                override_is_on = self.shared_state.get_override()
+                override_seq = self.shared_state.bump_sequence(OVERRIDE_SENDER_ID)
+                override_status = "override" if override_is_on else "active"
+                override_msg = msg_handler.SensorMessage(
+                    sender_id=OVERRIDE_SENDER_ID,
+                    sender_name=None,
+                    data_type=OVERRIDE_DATA_TYPE,
+                    sequence_no=override_seq,
+                    payload=msg_handler.HeartBeatPayload(
+                        status=override_status,
+                        status_code=200,
+                    ),
+                )
+                socket.send_string(override_msg.model_dump_json())
                 time.sleep(self.publish_interval_sec)
         finally:
             socket.close()
@@ -194,6 +238,13 @@ class SubscriberThread(threading.Thread):
 
 
 def build_handler(shared_state: SharedState, html_body: bytes) -> type[BaseHTTPRequestHandler]:
+    def parse_bool(raw_value: object) -> bool:
+        if isinstance(raw_value, bool):
+            return raw_value
+        if isinstance(raw_value, str):
+            return raw_value.strip().lower() in {"1", "true", "on"}
+        return False
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
             if self.path == "/":
@@ -229,14 +280,16 @@ def build_handler(shared_state: SharedState, html_body: bytes) -> type[BaseHTTPR
 
             for sensor_id in SENSOR_IDS:
                 if sensor_id not in data:
-                    continue
-                raw_value = data[sensor_id]
-                value = False
-                if isinstance(raw_value, bool):
-                    value = raw_value
-                elif isinstance(raw_value, str):
-                    value = raw_value.strip().lower() in {"1", "true", "on"}
-                shared_state.set_sensor(sensor_id, value)
+                    pass
+                else:
+                    shared_state.set_sensor(sensor_id, parse_bool(data[sensor_id]))
+
+                connected_key = f"{sensor_id}_connected"
+                if connected_key in data:
+                    shared_state.set_sensor_connected(sensor_id, parse_bool(data[connected_key]))
+
+            if OVERRIDE_INPUT_KEY in data:
+                shared_state.set_override(parse_bool(data[OVERRIDE_INPUT_KEY]))
 
             payload = json.dumps(shared_state.snapshot(), ensure_ascii=False).encode("utf-8")
             self._send_response(HTTPStatus.OK, payload, "application/json; charset=utf-8")

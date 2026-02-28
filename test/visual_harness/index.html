@@ -80,6 +80,12 @@
         margin-right: 6px;
       }
 
+      .disconnect-toggle {
+        margin-left: 12px;
+        color: var(--subtle);
+        font-size: 0.9rem;
+      }
+
       .state-line {
         display: flex;
         gap: 10px;
@@ -139,11 +145,11 @@
   <body>
     <main>
       <h1>Center Visual Harness</h1>
-      <p>Input (3 sensors), inferred internal state, and latest display/motor commands.</p>
+      <p>Input (3 sensors + override), inferred internal state, and latest display/motor commands.</p>
 
       <div class="grid">
         <section class="card">
-          <h2 class="section-title">Input: Sensors</h2>
+          <h2 class="section-title">Input: Sensors + Override</h2>
           <div class="sensor-row" id="sensorControls"></div>
         </section>
 
@@ -166,34 +172,64 @@
 
     <script>
       const sensorIds = ["sensor_1", "sensor_2", "sensor_3"];
-      const sensorState = { sensor_1: false, sensor_2: false, sensor_3: false };
+      const inputState = {
+        sensor_1: false,
+        sensor_2: false,
+        sensor_3: false,
+        sensor_1_connected: true,
+        sensor_2_connected: true,
+        sensor_3_connected: true,
+        override: false,
+      };
 
       function renderSensorControls() {
         const root = document.getElementById("sensorControls");
         root.innerHTML = "";
-        sensorIds.forEach((sensorId, index) => {
+        function buildControl(label, name) {
           const container = document.createElement("div");
           container.className = "sensor-control";
+          const disconnectedCheckbox =
+            name === "override"
+              ? ""
+              : `<label class="disconnect-toggle">
+                   <input type="checkbox" name="${name}_disconnected" ${!inputState[`${name}_connected`] ? "checked" : ""}>
+                   disconnected
+                 </label>`;
           container.innerHTML = `
-            <div class="sensor-label">Sensor ${index + 1}</div>
+            <div class="sensor-label">${label}</div>
             <div class="radio-group">
               <label>
-                <input type="radio" name="${sensorId}" value="on" ${sensorState[sensorId] ? "checked" : ""}>
+                <input type="radio" name="${name}" value="on" ${inputState[name] ? "checked" : ""}>
                 ON
               </label>
               <label>
-                <input type="radio" name="${sensorId}" value="off" ${!sensorState[sensorId] ? "checked" : ""}>
+                <input type="radio" name="${name}" value="off" ${!inputState[name] ? "checked" : ""}>
                 OFF
               </label>
+              ${disconnectedCheckbox}
             </div>
           `;
           root.appendChild(container);
+        }
+
+        sensorIds.forEach((sensorId, index) => {
+          buildControl(`Sensor ${index + 1}`, sensorId);
+        });
+        buildControl("Override", "override");
+
+        [...sensorIds, "override"].forEach((key) => {
+          document.querySelectorAll(`input[name="${key}"]`).forEach((input) => {
+            input.addEventListener("change", () => {
+              inputState[key] = input.value === "on";
+              pushSensorState();
+            });
+          });
         });
 
         sensorIds.forEach((sensorId) => {
-          document.querySelectorAll(`input[name="${sensorId}"]`).forEach((input) => {
+          document.querySelectorAll(`input[name="${sensorId}_disconnected"]`).forEach((input) => {
             input.addEventListener("change", () => {
-              sensorState[sensorId] = input.value === "on";
+              inputState[`${sensorId}_connected`] = !input.checked;
               pushSensorState();
             });
           });
@@ -205,7 +241,7 @@
           await fetch("/api/sensors", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(sensorState),
+            body: JSON.stringify(inputState),
           });
         } catch (_err) {
           // no-op
@@ -228,12 +264,18 @@
       function renderInternalState(data) {
         const internal = data.internal_state || {};
         const sensorInputs = data.sensor_inputs || {};
+        const sensorConnected = data.sensor_connected || {};
+        const overrideInput = Boolean(data.override_input);
         const root = document.getElementById("internalState");
 
         root.innerHTML = [
           stateLine("Input Sensor 1", asPill(Boolean(sensorInputs.sensor_1))),
+          stateLine("Sensor 1 Connected", asPill(Boolean(sensorConnected.sensor_1))),
           stateLine("Input Sensor 2", asPill(Boolean(sensorInputs.sensor_2))),
+          stateLine("Sensor 2 Connected", asPill(Boolean(sensorConnected.sensor_2))),
           stateLine("Input Sensor 3", asPill(Boolean(sensorInputs.sensor_3))),
+          stateLine("Sensor 3 Connected", asPill(Boolean(sensorConnected.sensor_3))),
+          stateLine("Input Override", asPill(overrideInput)),
           stateLine("Override Mode", String(internal.is_override_mode)),
           stateLine("Display Motor Mode", String(internal.motor_mode)),
           stateLine("Majority Human", String(internal.majority_human_from_display)),

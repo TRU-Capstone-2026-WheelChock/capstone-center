@@ -4,7 +4,10 @@ Manual visual test setup for `capstone_center`.
 
 ## What it shows
 
-- Input: 3 sensor toggles (`ON/OFF`)
+- Input:
+  - 3 sensor toggles (`ON/OFF`)
+  - sensor disconnected checkboxes (per sensor)
+  - override toggle (`ON/OFF`)
 - Internal state: values inferred from latest `DisplayMessage`
 - Output:
   - latest display command (raw JSON)
@@ -21,6 +24,29 @@ Open:
 ```text
 http://localhost:8080
 ```
+
+## Run Without Docker
+
+Prerequisite: `poetry install` is already done in this repository.
+
+```bash
+bash test/visual_harness/run_local.sh
+```
+
+The script starts two processes:
+
+- center app (`run_center.py`)
+- visual harness web UI (`visual_harness.py`)
+
+Stop with `Ctrl+C` (both processes will be terminated).
+
+## Timeout Check
+
+To verify heartbeat timeout behavior:
+
+1. Keep the harness running.
+2. Turn on `disconnected` for one sensor.
+3. Confirm the center logs timeout warnings for that sensor after threshold time.
 
 ## Notes
 

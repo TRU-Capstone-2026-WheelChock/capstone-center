@@ -2,10 +2,15 @@ import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 
+import capstone_center.display_sender_processor as display_target
+import capstone_center.motor_sender_processor as motor_target
 import capstone_center.msg_recv_processor as recv_target
+from capstone_center.display_sender_processor import DisplaySenderProcessor
+from capstone_center.motor_sender_processor import MotorSenderProcessor
 from capstone_center.msg_recv_processor import MessageRecvProcessor
 from capstone_center.sensor_information_processor import SensorInformationProcessor
 from capstone_center.state_store import CoalescedUpdateSignal, DerivedState, RuntimeState
@@ -107,3 +112,137 @@ async def test_recv_to_sensor_processor_fans_out_display_and_motor_signals(
     sensor_task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await sensor_task
+
+
+@pytest.mark.asyncio
+async def test_override_event_reaches_display_and_motor_outputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    display_sent = asyncio.Event()
+    motor_sent = asyncio.Event()
+    display_messages: list[SimpleNamespace] = []
+    motor_messages: list[SimpleNamespace] = []
+
+    class _DisplayPublisher:
+        async def send(self, data):
+            display_messages.append(data)
+            display_sent.set()
+
+    class _MotorPublisher:
+        async def send(self, data):
+            motor_messages.append(data)
+            motor_sent.set()
+
+    @asynccontextmanager
+    async def _display_pub_ctx(_pub_opt):
+        yield _DisplayPublisher()
+
+    @asynccontextmanager
+    async def _motor_pub_ctx(_pub_opt):
+        yield _MotorPublisher()
+
+    display_pub_opt = object()
+    motor_pub_opt = object()
+
+    def _fake_get_async_publisher(pub_opt):
+        if pub_opt is display_pub_opt:
+            return _display_pub_ctx(pub_opt)
+        if pub_opt is motor_pub_opt:
+            return _motor_pub_ctx(pub_opt)
+        raise AssertionError("unexpected publisher option")
+
+    monkeypatch.setattr(display_target.msg_handler, "get_async_publisher", _fake_get_async_publisher)
+    monkeypatch.setattr(motor_target.msg_handler, "get_async_publisher", _fake_get_async_publisher)
+    monkeypatch.setattr(
+        display_target.msg_handler,
+        "DisplayMessage",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+    monkeypatch.setattr(
+        motor_target.msg_handler,
+        "MotorState",
+        SimpleNamespace(DEPLOYING="DEPLOYING", FOLDING="FOLDING"),
+    )
+    monkeypatch.setattr(
+        motor_target.msg_handler,
+        "MotorMessage",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+
+    state = RuntimeState()
+    derived_state = DerivedState()
+    state_lock = asyncio.Lock()
+    derived_state_lock = asyncio.Lock()
+
+    signal_sensor = CoalescedUpdateSignal(name="sensor")
+    signal_display = CoalescedUpdateSignal(name="display")
+    signal_motor = CoalescedUpdateSignal(name="motor")
+
+    recv = MessageRecvProcessor(
+        state=state,
+        state_lock=state_lock,
+        signal_sensor_process=signal_sensor,
+        sub_opt=object(),
+    )
+    sensor_proc = SensorInformationProcessor(
+        state=state,
+        state_lock=state_lock,
+        derived_state=derived_state,
+        derived_state_lock=derived_state_lock,
+        signal_sensor_process=signal_sensor,
+        signal_display_process=signal_display,
+        signal_motor_process=signal_motor,
+    )
+    display_proc = DisplaySenderProcessor(
+        state=state,
+        state_lock=state_lock,
+        signal_sensor_process=signal_display,
+        pub_opt=display_pub_opt,
+        sender_id="display-center",
+    )
+    motor_proc = MotorSenderProcessor(
+        state=state,
+        state_lock=state_lock,
+        derived_state=derived_state,
+        derived_state_lock=derived_state_lock,
+        signal_motor_process=signal_motor,
+        pub_opt=motor_pub_opt,
+        sender_id="motor-center",
+        loop_time=60.0,
+    )
+
+    sensor_task = asyncio.create_task(sensor_proc.run())
+    display_task = asyncio.create_task(display_proc.run())
+    motor_task = asyncio.create_task(motor_proc.run())
+
+    class _OverrideMsg:
+        def __init__(self):
+            self.sender_id = "override_1"
+            self.sender_name = "override"
+            self.timestamp = datetime.now()
+            self.payload = recv_target.msg_handler.schemas.HeartBeatPayload(
+                status="override",
+                status_code=200,
+            )
+
+        def get_status(self):
+            return self.payload.status_code, self.payload.status
+
+    override_msg = _OverrideMsg()
+    await recv._override_button(override_msg)
+    signal_sensor.publish()
+
+    await asyncio.wait_for(display_sent.wait(), timeout=1.0)
+    await asyncio.wait_for(motor_sent.wait(), timeout=1.0)
+
+    assert state.isin_override_mode is True
+    assert display_messages[-1].is_override_mode is True
+    assert motor_messages[-1].is_override_mode is True
+    assert motor_messages[-1].ordered_mode == "FOLDING"
+
+    for task in (sensor_task, display_task, motor_task):
+        task.cancel()
+
+    for task in (sensor_task, display_task, motor_task):
+        with pytest.raises(asyncio.CancelledError):
+            await task

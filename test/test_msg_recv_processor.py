@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -236,3 +237,27 @@ async def test_run_uses_sub_opt_for_subscriber(monkeypatch: pytest.MonkeyPatch):
     await p.run()
 
     assert captured == [sub_opt]
+
+
+@pytest.mark.asyncio
+async def test_handle_heart_beat_uses_receiver_time_not_message_timestamp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 28, 4, 40, 45)
+    old_msg_time = fixed_now - timedelta(seconds=59)
+
+    class _FakeDatetime:
+        @classmethod
+        def now(cls):
+            return fixed_now
+
+    monkeypatch.setattr(target, "datetime", _FakeDatetime)
+
+    state = RuntimeState()
+    p = MessageRecvProcessor(state, asyncio.Lock(), CoalescedUpdateSignal(), sub_opt=object())
+    msg = SimpleNamespace(sender_id="sensor-1", sender_name="sensor", timestamp=old_msg_time)
+
+    await p._handle_heart_beat(msg)
+
+    assert state.heartbeats["sensor-1"].last_seen == fixed_now
+    assert state.heartbeats["sensor-1"].last_seen != old_msg_time
