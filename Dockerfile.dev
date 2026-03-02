@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1.6
+FROM python:3.12-bookworm
+WORKDIR /app
+
+ARG USERNAME=dev
+ARG UID=1000
+ARG GID=1000
+
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir poetry
+
+ENV POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
+    POETRY_VIRTUALENVS_CREATE=true
+
+
+RUN groupadd -g ${GID} ${USERNAME} \
+ && useradd -m -u ${UID} -g ${GID} -s /bin/bash ${USERNAME}
+
+COPY pyproject.toml poetry.lock* ./
+RUN --mount=type=cache,target=/root/.cache/pypoetry \
+    --mount=type=cache,target=/root/.cache/pip \
+    poetry install --with dev --no-root
+
+RUN chown -R ${USERNAME}:${USERNAME} /app
+USER ${USERNAME}
+
+CMD ["sleep", "infinity"]

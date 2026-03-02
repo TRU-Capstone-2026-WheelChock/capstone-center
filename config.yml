@@ -1,0 +1,73 @@
+app:
+  name: capstone-center
+  version: 0.1.0
+  timezone: America/Vancouver
+
+logging:
+  level: INFO
+  format: "%(asctime)s %(levelname)s pid=%(process)d %(name)s %(pathname)s:%(lineno)d - %(message)s"
+
+zmq:
+  sub:
+    endpoint: "tcp://localhost:5555"
+    topics:
+      - ""
+    is_bind: true
+
+runtime:
+  loop_interval_sec: 1.0
+  watchdog_interval_sec: 1.0
+  heartbeat_timeout_sec: 5.0
+  heartbeat_remove_sec: 60.0
+  sensor_stale_sec: 10.0
+  history_len: 3
+
+presence:
+  probability_threshold: 0.5
+  tie_breaker: "absent"
+  use_sensor_local_majority: false
+  sensor_local_window: 3
+
+status:
+  keep_last_n: 3
+  stale_sec: 300
+  timeout_label: "Timeout"
+
+display:
+  refresh_interval_sec: 1.0
+  show_last_status_on_timeout: true
+  timeout_template: "Timeout - last-status: {status}"
+
+  endpoint: "tcp://localhost:5555"
+  topics: "display"
+  
+
+
+motor:
+  name: motor
+  status:
+    DEAD: null
+    ERROR: null
+    WARN: null
+    DEPLOYED: true
+    DEPLOYING: true
+    FOLDING: false
+    FOLDED: false
+    OK: null
+    STARTING: null
+
+  looptime : 10.0
+  endpoint: "tcp://localhost:5555"
+  topics: "motor"
+
+
+
+
+policy:
+  status_priority:
+    - DEAD
+    - ERROR
+    - WARN
+    - OK
+    - STARTING
+
