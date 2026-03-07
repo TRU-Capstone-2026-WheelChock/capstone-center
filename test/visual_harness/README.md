@@ -25,21 +25,6 @@ Open:
 http://localhost:8080
 ```
 
-## Run Without Docker
-
-Prerequisite: `poetry install` is already done in this repository.
-
-```bash
-bash test/visual_harness/run_local.sh
-```
-
-The script starts two processes:
-
-- center app (`run_center.py`)
-- visual harness web UI (`visual_harness.py`)
-
-Stop with `Ctrl+C` (both processes will be terminated).
-
 ## Timeout Check
 
 To verify heartbeat timeout behavior:
