@@ -1,7 +1,6 @@
 name: CI
 
 on:
-  push:
   pull_request:
     branches:
       - main
@@ -9,9 +8,6 @@ on:
 
 jobs:
   test:
-    if: >
-      github.event_name == 'pull_request' ||
-      endsWith(github.event.head_commit.message, '_action')
     runs-on: ubuntu-latest
 
 
