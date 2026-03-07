@@ -9,6 +9,10 @@ from capstone_center.state_store import ComponentHeartbeat, RuntimeState
 
 @pytest.mark.asyncio
 async def test_heartbeat_process_marks_dead_after_timeout() -> None:
+    """Marks a component dead after timeout but keeps the heartbeat entry.
+
+    Mocking: none. Uses a real RuntimeState with a synthetic old timestamp.
+    """
     now = datetime.now()
     state = RuntimeState()
     state.heartbeats["c-1"] = ComponentHeartbeat(last_seen=now - timedelta(seconds=6))
@@ -26,6 +30,10 @@ async def test_heartbeat_process_marks_dead_after_timeout() -> None:
 
 @pytest.mark.asyncio
 async def test_heartbeat_process_removes_after_remove_threshold() -> None:
+    """Removes a component entry after the remove threshold is exceeded.
+
+    Mocking: none. Uses a real RuntimeState with a heartbeat older than the purge window.
+    """
     now = datetime.now()
     state = RuntimeState()
     state.heartbeats["c-2"] = ComponentHeartbeat(last_seen=now - timedelta(seconds=61))
@@ -43,6 +51,10 @@ async def test_heartbeat_process_removes_after_remove_threshold() -> None:
 
 @pytest.mark.asyncio
 async def test_heartbeat_runner_rejects_non_positive_params() -> None:
+    """Rejects invalid heartbeat loop configuration values.
+
+    Mocking: none. Calls the real heartbeat runner directly.
+    """
     proc = HeartbeatProcessor(
         state=RuntimeState(),
         state_lock=asyncio.Lock(),
@@ -55,6 +67,10 @@ async def test_heartbeat_runner_rejects_non_positive_params() -> None:
 
 @pytest.mark.asyncio
 async def test_heartbeat_runner_propagates_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Propagates cancellation from the sleep call without swallowing it.
+
+    Mocking: patches `asyncio.sleep` inside `heartbeat_process` to raise `CancelledError`.
+    """
     proc = HeartbeatProcessor(
         state=RuntimeState(),
         state_lock=asyncio.Lock(),
@@ -68,3 +84,27 @@ async def test_heartbeat_runner_propagates_cancel(monkeypatch: pytest.MonkeyPatc
 
     with pytest.raises(asyncio.CancelledError):
         await proc.heartbeat_runner(loop_time=1.0, timeout_threshold=5.0, remove_threshold=60.0)
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_process_keeps_component_alive_when_recent_signal_arrives() -> None:
+    """Keeps a component alive if a fresh heartbeat arrives before the watchdog pass.
+
+    Mocking: none. The test updates RuntimeState directly to simulate a late recovery.
+    """
+    now = datetime.now()
+    state = RuntimeState()
+    state.heartbeats["sensor-1"] = ComponentHeartbeat(last_seen=now - timedelta(seconds=20))
+    state.dead_components_set.add("sensor-1")
+
+    # Simulate a fresh signal update before watchdog runs again.
+    state.mark_heartbeat("sensor-1", now - timedelta(milliseconds=100))
+
+    proc = HeartbeatProcessor(
+        state=state,
+        state_lock=asyncio.Lock(),
+        hb_config=HeartbeatConfig(loop_time=1.0, timeout_threshold=5.0, remove_threshold=60.0),
+    )
+    await proc.heartbeat_process(now=now, timeout_threshold=5.0, remove_threshold=60.0)
+
+    assert "sensor-1" not in state.dead_components_set

@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -12,6 +13,8 @@ from capstone_center.state_store import RuntimeState, CoalescedUpdateSignal
 
 
 class _AsyncIter:
+    """Async iterator yielded by the subscriber context-manager mock."""
+
     def __init__(self, items):
         self._iter = iter(items)
 
@@ -46,6 +49,13 @@ def _patch_model_validate(monkeypatch: pytest.MonkeyPatch, validate_fn):
 
 @pytest.mark.asyncio
 async def test_run_dispatches_heartbeat_to_other_handler(monkeypatch: pytest.MonkeyPatch):
+    """Routes heartbeat messages to the non-sensor handler.
+
+    Mocking:
+    - `msg_handler.get_async_subscriber` yields one synthetic raw item.
+    - `msg_handler.SensorMessage.model_validate` returns a fake heartbeat message.
+    - Internal handler methods are replaced with `AsyncMock`.
+    """
     p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock()
@@ -68,6 +78,13 @@ async def test_run_dispatches_heartbeat_to_other_handler(monkeypatch: pytest.Mon
 
 @pytest.mark.asyncio
 async def test_run_dispatches_sensor_to_sensor_handler(monkeypatch: pytest.MonkeyPatch):
+    """Routes sensor messages to the sensor-specific handler.
+
+    Mocking:
+    - `msg_handler.get_async_subscriber` yields one synthetic raw item.
+    - `msg_handler.SensorMessage.model_validate` returns a fake sensor message.
+    - Internal handler methods are replaced with `AsyncMock`.
+    """
     p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock()
@@ -90,6 +107,14 @@ async def test_run_dispatches_sensor_to_sensor_handler(monkeypatch: pytest.Monke
 
 @pytest.mark.asyncio
 async def test_run_dispatches_override_button_to_override_handler(monkeypatch: pytest.MonkeyPatch):
+    """Routes override button messages to the override handler.
+
+    Mocking:
+    - `msg_handler.get_async_subscriber` yields one synthetic raw item.
+    - `msg_handler.GenericMessageDatatype.OVERRIDE_BUTTON` is patched to a known string.
+    - `msg_handler.SensorMessage.model_validate` returns a fake override message.
+    - Internal handler methods are replaced with `AsyncMock`.
+    """
     p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(), CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock()
@@ -119,6 +144,13 @@ async def test_run_dispatches_override_button_to_override_handler(monkeypatch: p
 
 @pytest.mark.asyncio
 async def test_run_ignores_unknown_data_type(monkeypatch: pytest.MonkeyPatch):
+    """Ignores unknown message types without dispatching to known handlers.
+
+    Mocking:
+    - `msg_handler.get_async_subscriber` yields one synthetic raw item.
+    - `msg_handler.SensorMessage.model_validate` returns a fake unknown message.
+    - Internal handler methods are replaced with `AsyncMock`.
+    """
     p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock()
@@ -141,6 +173,13 @@ async def test_run_ignores_unknown_data_type(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.asyncio
 async def test_run_continues_after_validation_error(monkeypatch: pytest.MonkeyPatch):
+    """Continues processing after a validation failure on one raw message.
+
+    Mocking:
+    - `msg_handler.get_async_subscriber` yields a bad item followed by a valid item.
+    - `msg_handler.SensorMessage.model_validate` is patched to raise a Pydantic validation error for the bad item.
+    - Internal handler methods are replaced with `AsyncMock`.
+    """
     p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock()
@@ -169,6 +208,14 @@ async def test_run_continues_after_validation_error(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 async def test_run_continues_after_assertion_error(monkeypatch: pytest.MonkeyPatch):
+    """Continues processing after a handler raises an assertion error.
+
+    Mocking:
+    - `msg_handler.get_async_subscriber` yields a sensor item followed by a heartbeat item.
+    - `msg_handler.SensorMessage.model_validate` returns fake message objects.
+    - `_sensor_msg_handler` is replaced with an `AsyncMock` that raises `AssertionError`.
+    - `_other_msg_handler` is replaced with an `AsyncMock`.
+    """
     p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=object())
     p._other_msg_handler = AsyncMock()
     p._sensor_msg_handler = AsyncMock(side_effect=AssertionError("boom"))
@@ -194,6 +241,10 @@ async def test_run_continues_after_assertion_error(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.asyncio
 async def test_handle_override_sets_override_mode_true_for_override_status() -> None:
+    """Sets override mode when the override heartbeat payload reports override status.
+
+    Mocking: none. Uses the real heartbeat payload schema from `msg_handler`.
+    """
     state = RuntimeState()
     p = MessageRecvProcessor(state, asyncio.Lock(), CoalescedUpdateSignal(), sub_opt=object())
     payload = target.msg_handler.schemas.HeartBeatPayload(status="override", status_code=200)
@@ -205,6 +256,10 @@ async def test_handle_override_sets_override_mode_true_for_override_status() -> 
 
 @pytest.mark.asyncio
 async def test_handle_override_sets_override_mode_false_for_non_override_status() -> None:
+    """Clears override mode when the payload status is not override.
+
+    Mocking: none. Uses the real heartbeat payload schema from `msg_handler`.
+    """
     state = RuntimeState()
     state.set_override_mode(True)
     p = MessageRecvProcessor(state, asyncio.Lock(), CoalescedUpdateSignal(), sub_opt=object())
@@ -217,6 +272,13 @@ async def test_handle_override_sets_override_mode_false_for_non_override_status(
 
 @pytest.mark.asyncio
 async def test_run_uses_sub_opt_for_subscriber(monkeypatch: pytest.MonkeyPatch):
+    """Passes the configured subscriber options object into the subscriber factory.
+
+    Mocking:
+    - `msg_handler.get_async_subscriber` captures the received `sub_opt`.
+    - `msg_handler.SensorMessage.model_validate` is patched, though no messages are emitted.
+    - Internal handler methods are replaced with `AsyncMock`.
+    """
     sub_opt = object()
     captured = []
     p = MessageRecvProcessor(RuntimeState(), asyncio.Lock(),CoalescedUpdateSignal(), sub_opt=sub_opt)
@@ -236,3 +298,31 @@ async def test_run_uses_sub_opt_for_subscriber(monkeypatch: pytest.MonkeyPatch):
     await p.run()
 
     assert captured == [sub_opt]
+
+
+@pytest.mark.asyncio
+async def test_handle_heart_beat_uses_receiver_time_not_message_timestamp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Uses receiver-side current time rather than trusting the inbound message timestamp.
+
+    Mocking: patches the module-local `datetime.now()` provider to a fixed timestamp.
+    """
+    fixed_now = datetime(2026, 2, 28, 4, 40, 45)
+    old_msg_time = fixed_now - timedelta(seconds=59)
+
+    class _FakeDatetime:
+        @classmethod
+        def now(cls):
+            return fixed_now
+
+    monkeypatch.setattr(target, "datetime", _FakeDatetime)
+
+    state = RuntimeState()
+    p = MessageRecvProcessor(state, asyncio.Lock(), CoalescedUpdateSignal(), sub_opt=object())
+    msg = SimpleNamespace(sender_id="sensor-1", sender_name="sensor", timestamp=old_msg_time)
+
+    await p._handle_heart_beat(msg)
+
+    assert state.heartbeats["sensor-1"].last_seen == fixed_now
+    assert state.heartbeats["sensor-1"].last_seen != old_msg_time

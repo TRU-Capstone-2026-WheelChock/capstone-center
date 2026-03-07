@@ -1,21 +1,33 @@
-# name: CI
+name: CI
 
-# on:
-#   push:
-#   pull_request:
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/*'
 
-# jobs:
-#   build:
-#     runs-on: ubuntu-latest
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-#     steps:
-#       - name: Checkout repository (with submodules)
-#         uses: actions/checkout@v4
-#         with:
-#           submodules: recursive
-#           fetch-depth: 0
 
-#       - name: Show directory tree
-#         run: |
-#           ls -la
-#           ls -la external || true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: poetry install --with dev --no-root
+
+      - name: Run tests
+        run: poetry run pytest

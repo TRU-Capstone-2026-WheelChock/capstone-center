@@ -16,6 +16,10 @@ from capstone_center.main import (
 
 
 def test_load_config_reads_yaml(tmp_path: Path) -> None:
+    """Loads YAML config from disk and preserves expected nested values.
+
+    Mocking: none. Uses a temporary real file on disk.
+    """
     config_file = tmp_path / "config.yml"
     config_file.write_text(
         """
@@ -44,6 +48,10 @@ runtime:
 
 
 def test_get_opt_reads_values_from_config() -> None:
+    """Builds subscriber options from config values as-is.
+
+    Mocking: none. Uses a real `zmq.asyncio.Context` instance.
+    """
     ctx = zmq.asyncio.Context.instance()
     cfg = {
         "zmq": {
@@ -63,6 +71,10 @@ def test_get_opt_reads_values_from_config() -> None:
 
 
 def test_get_opt_accepts_override_args() -> None:
+    """Allows explicit arguments to override subscriber config values.
+
+    Mocking: none. Uses a real `zmq.asyncio.Context` instance.
+    """
     ctx = zmq.asyncio.Context.instance()
     cfg = {
         "zmq": {
@@ -88,6 +100,10 @@ def test_get_opt_accepts_override_args() -> None:
 
 
 def test_get_opt_fails_if_topics_is_not_list() -> None:
+    """Rejects invalid subscriber topics config when it is not a list.
+
+    Mocking: none. Verifies the real validation path raises `SystemExit`.
+    """
     ctx = zmq.asyncio.Context.instance()
     cfg = {
         "zmq": {
@@ -104,6 +120,10 @@ def test_get_opt_fails_if_topics_is_not_list() -> None:
 
 
 def test_get_disp_pub_opt_reads_display_endpoint() -> None:
+    """Builds display publisher options from config and bind/connect inversion.
+
+    Mocking: none. Uses a real `zmq.asyncio.Context` instance.
+    """
     ctx = zmq.asyncio.Context.instance()
     cfg = {
         "display": {"endpoint": "tcp://127.0.0.1:7001"},
@@ -117,6 +137,10 @@ def test_get_disp_pub_opt_reads_display_endpoint() -> None:
 
 
 def test_get_motor_pub_opt_reads_motor_endpoint() -> None:
+    """Builds motor publisher options from config and bind/connect inversion.
+
+    Mocking: none. Uses a real `zmq.asyncio.Context` instance.
+    """
     ctx = zmq.asyncio.Context.instance()
     cfg = {
         "motor": {"endpoint": "tcp://127.0.0.1:7002"},
@@ -130,6 +154,10 @@ def test_get_motor_pub_opt_reads_motor_endpoint() -> None:
 
 
 def test_build_heartbeat_config_reads_required_runtime_keys() -> None:
+    """Maps runtime heartbeat values into the HeartbeatConfig dataclass.
+
+    Mocking: none. Calls the real builder with an in-memory config dict.
+    """
     cfg = {
         "runtime": {
             "watchdog_interval_sec": 1.0,
@@ -147,6 +175,10 @@ def test_build_heartbeat_config_reads_required_runtime_keys() -> None:
 
 @pytest.mark.asyncio
 async def test_center_app_run_starts_recv_and_heartbeat() -> None:
+    """Starts all processor tasks through the CenterApp task group.
+
+    Mocking: uses `AsyncMock` for every processor `run()` method so the test only checks orchestration.
+    """
     recv = SimpleNamespace(run=AsyncMock(return_value=None))
     hb = SimpleNamespace(run=AsyncMock(return_value=None))
     sp = SimpleNamespace(run=AsyncMock(return_value=None))
