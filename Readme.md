@@ -17,13 +17,22 @@
 If you want the same containerized development environment without using VS Code Dev Containers, use the root `docker-compose.yml` from a normal VS Code terminal:
 
 ```bash
-docker compose up -d dev
+docker compose up -d --build dev
 docker compose exec dev bash
 ```
 
 This gives you the same mounted workspace and Poetry virtualenv layout used by the dev container image, but without attaching VS Code to the container runtime.
 
 The development image keeps its Python environment inside the container at `/opt/venv`, so it does not depend on a bind-mounted `/app/.venv` and does not require a named volume for virtualenv persistence.
+
+If `poetry` is missing inside the container, you are usually running an older cached image that predates the current `Dockerfile.dev`. Rebuild the `dev` image and recreate the container:
+
+```bash
+docker compose down
+docker compose build --no-cache dev
+docker compose up -d dev
+docker compose exec dev bash
+```
 
 To stop it:
 
