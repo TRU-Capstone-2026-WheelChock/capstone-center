@@ -9,11 +9,14 @@ ARG GID=1000
 RUN apt-get update && apt-get install -y --no-install-recommends git \
  && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir poetry
-
 ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    POETRY_VIRTUALENVS_CREATE=true
+    POETRY_VIRTUALENVS_CREATE=false \
+    VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:$PATH
+
+RUN python -m venv /opt/venv \
+ && pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir poetry
 
 
 RUN groupadd -g ${GID} ${USERNAME} \
@@ -24,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/pypoetry \
     --mount=type=cache,target=/root/.cache/pip \
     poetry install --with dev --no-root
 
-RUN chown -R ${USERNAME}:${USERNAME} /app
+RUN chown -R ${USERNAME}:${USERNAME} /app /opt/venv
 USER ${USERNAME}
 
 CMD ["sleep", "infinity"]

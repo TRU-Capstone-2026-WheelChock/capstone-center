@@ -11,6 +11,13 @@ from capstone_center.state_store import CoalescedUpdateSignal, DerivedState, Run
 
 @pytest.mark.asyncio
 async def test_motor_sender_periodic_retry_sends_without_event(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Publishes periodic motor retries even when no signal event is received.
+
+    Mocking:
+    - `msg_handler.get_async_publisher` is replaced with an in-memory async context manager.
+    - `msg_handler.MotorState` is replaced with a simple namespace.
+    - `msg_handler.MotorMessage` is replaced with a `SimpleNamespace` factory.
+    """
     sent_messages: list[SimpleNamespace] = []
 
     class _FakePublisher:

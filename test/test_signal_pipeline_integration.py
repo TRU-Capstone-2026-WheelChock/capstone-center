@@ -42,6 +42,13 @@ def _subscriber_factory(raw_items):
 async def test_recv_to_sensor_processor_fans_out_display_and_motor_signals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verifies that one sensor message propagates through derived-state fan-out signals.
+
+    Mocking:
+    - `msg_handler.SensorPayload` is replaced with a lightweight fake payload class.
+    - `msg_handler.SensorMessage` is replaced with a trivial validator that returns the raw object.
+    - `msg_handler.get_async_subscriber` is replaced with an in-memory async iterator.
+    """
     @dataclass
     class _FakeSensorPayload:
         isThereHuman: bool
@@ -118,6 +125,13 @@ async def test_recv_to_sensor_processor_fans_out_display_and_motor_signals(
 async def test_override_event_reaches_display_and_motor_outputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verifies that override mode reaches both display and motor publishers.
+
+    Mocking:
+    - display and motor `msg_handler.get_async_publisher` functions are replaced with in-memory publishers.
+    - `DisplayMessage`, `MotorState`, and `MotorMessage` are patched with lightweight stand-ins.
+    - The override payload uses the real `msg_handler` heartbeat schema.
+    """
     display_sent = asyncio.Event()
     motor_sent = asyncio.Event()
     display_messages: list[SimpleNamespace] = []

@@ -23,6 +23,8 @@ docker compose exec dev bash
 
 This gives you the same mounted workspace and Poetry virtualenv layout used by the dev container image, but without attaching VS Code to the container runtime.
 
+The development image keeps its Python environment inside the container at `/opt/venv`, so it does not depend on a bind-mounted `/app/.venv` and does not require a named volume for virtualenv persistence.
+
 To stop it:
 
 ```bash

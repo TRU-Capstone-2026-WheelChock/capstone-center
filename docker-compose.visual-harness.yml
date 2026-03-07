@@ -10,7 +10,6 @@ services:
     working_dir: /app
     volumes:
       - .:/app:cached
-      - poetry-venv:/app/.venv
     command: bash -lc "poetry run python test/visual_harness/run_center.py"
 
   visual:
@@ -28,7 +27,6 @@ services:
       - "8080:8080"
     volumes:
       - .:/app:cached
-      - poetry-venv:/app/.venv
     command: >
       bash -lc
       "poetry run python test/visual_harness/visual_harness.py
@@ -37,6 +35,3 @@ services:
       --sensor-endpoint tcp://center:5555
       --display-endpoint tcp://center:5556
       --motor-endpoint tcp://center:5557"
-
-volumes:
-  poetry-venv:

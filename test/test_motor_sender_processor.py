@@ -11,6 +11,10 @@ import capstone_center.motor_sender_processor as target
 
 @pytest.mark.asyncio
 async def test_decide_next_motor_state_prefers_override_folding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prefers folding in override mode and otherwise follows presence state.
+
+    Mocking: patches `msg_handler.MotorState` with a simple namespace so the decision logic is isolated.
+    """
     monkeypatch.setattr(
         target.msg_handler,
         "MotorState",
@@ -33,6 +37,13 @@ async def test_decide_next_motor_state_prefers_override_folding(monkeypatch: pyt
 
 @pytest.mark.asyncio
 async def test_run_sends_motor_message_on_signal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sends one motor command immediately when the signal pipeline publishes an event.
+
+    Mocking:
+    - `msg_handler.get_async_publisher` is replaced with an in-memory async publisher.
+    - `msg_handler.MotorState` is replaced with a simple namespace.
+    - `msg_handler.MotorMessage` is replaced with a `SimpleNamespace` factory.
+    """
     sent_event = asyncio.Event()
     sent_messages: list[SimpleNamespace] = []
 

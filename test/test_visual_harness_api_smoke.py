@@ -31,6 +31,13 @@ def _make_handler_instance(handler_cls, *, path: str, body: bytes = b"{}"):
 
 
 def test_visual_harness_api_post_and_get_state_smoke() -> None:
+    """Exercises the visual harness HTTP handler with in-memory request objects.
+
+    Mocking:
+    - No network server is started.
+    - The handler instance is constructed manually with in-memory `BytesIO` streams for request and response bodies.
+    - The imported module is loaded directly from file via `importlib`.
+    """
     module = _load_visual_harness_module()
     shared_state = module.SharedState()
     handler_cls = module.build_handler(shared_state, b"<html></html>")

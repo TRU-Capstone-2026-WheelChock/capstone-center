@@ -9,10 +9,6 @@ services:
         GID: 1000
     volumes:
       - .:/app:cached
-      - poetry-venv:/app/.venv
     env_file:
       - .env_dev
     command: sleep infinity
-
-volumes:
-  poetry-venv:
