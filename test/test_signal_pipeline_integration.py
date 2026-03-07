@@ -17,6 +17,8 @@ from capstone_center.state_store import CoalescedUpdateSignal, DerivedState, Run
 
 
 class _AsyncIter:
+    """Async iterator yielded by the subscriber context-manager mock."""
+
     def __init__(self, items):
         self._iter = iter(items)
 

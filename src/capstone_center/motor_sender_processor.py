@@ -1,12 +1,17 @@
 import asyncio
 import logging
 from copy import deepcopy
+from typing import Protocol
 
 import msg_handler
 from pydantic import ValidationError
 
 from capstone_center.decorators import with_async_lock_attr, with_state_lock
 from capstone_center.state_store import CoalescedUpdateSignal, DerivedState, RuntimeState
+
+
+class _AsyncMotorPublisher(Protocol):
+    async def send(self, msg: msg_handler.MotorMessage) -> None: ...
 
 
 class MotorSenderProcessor:
@@ -76,35 +81,44 @@ class MotorSenderProcessor:
             ordered_mode=next_state,
         )
 
-    async def run(self):
-        """Publish on update events and also on periodic timeout as a retry."""
+    async def _wait_for_trigger_reason(self) -> str:
+        """Return whether the next publish was triggered by an event or timeout."""
+        try:
+            # Normal path: wake up immediately when sensor processing publishes an update.
+            await asyncio.wait_for(self.signal_motor_process.wait_next(), timeout=self.loop_time)
+            return "event"
+        except asyncio.TimeoutError:
+            # Timeout path is intentional. We periodically re-send the latest
+            # command so a late subscriber can catch up even if it missed
+            # earlier PUB messages.
+            return "periodic"
+
+    async def _publish_once(self, pub: _AsyncMotorPublisher, reason: str) -> None:
+        """Build and publish the latest motor command once."""
+        try:
+            self.logger.debug("sending motor command (%s trigger)", reason)
+            isin_override_mode, _motor_mode = await self._get_motor_related_runtime_fields()
+            derived_state_snap = await self._get_derived_state_snapshot()
+
+            data = await self._build_motor_message(
+                isin_override_mode=isin_override_mode,
+                derived_state_snap=derived_state_snap,
+            )
+            await pub.send(data)
+            self.logger.debug("motor message sent (%s trigger)", reason)
+        except ValidationError:
+            self.logger.exception("Drop invalid motor message due to validation error")
+        except Exception:
+            self.logger.exception("Unexpected error while sending motor message.")
+
+    async def _run_publish_loop(self, pub: _AsyncMotorPublisher) -> None:
+        """Keep publishing on update events and periodic retry timeouts."""
+        while True:
+            reason = await self._wait_for_trigger_reason()
+            await self._publish_once(pub, reason)
+
+    async def run(self) -> None:
+        """Open the publisher and keep sending motor commands."""
         async with msg_handler.get_async_publisher(self.pub_opt) as pub:
             self.logger.info("motor publisher is UP")
-            while True:
-                try:
-                    # Normal path: wake up immediately when sensor processing publishes an update.
-                    await asyncio.wait_for(self.signal_motor_process.wait_next(), timeout=self.loop_time)
-                    triggered = True
-                except asyncio.TimeoutError:
-                    # Timeout path is intentional. We periodically re-send the latest
-                    # command so a late subscriber can catch up even if it missed
-                    # earlier PUB messages.
-                    triggered = False
-
-                reason = "event" if triggered else "periodic"
-                
-                try:
-                    self.logger.debug("sending motor command (%s trigger)", reason)
-                    isin_override_mode, _motor_mode = await self._get_motor_related_runtime_fields()
-                    derived_state_snap = await self._get_derived_state_snapshot()
-
-                    data = await self._build_motor_message(
-                        isin_override_mode=isin_override_mode,
-                        derived_state_snap=derived_state_snap,
-                    )
-                    await pub.send(data)
-                    self.logger.debug("motor message sent (%s trigger)", reason)
-                except ValidationError:
-                    self.logger.exception("Drop invalid motor message due to validation error")
-                except Exception:
-                    self.logger.exception("Unexpected error while sending motor message.")
+            await self._run_publish_loop(pub)
