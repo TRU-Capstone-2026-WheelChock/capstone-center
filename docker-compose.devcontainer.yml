@@ -1,5 +1,5 @@
 services:
-  dev:
+  app:
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -7,15 +7,11 @@ services:
         USERNAME: dev
         UID: 1000
         GID: 1000
-    working_dir: /app
     volumes:
       - .:/app:cached
       - poetry-venv:/app/.venv
     env_file:
       - .env_dev
-    stdin_open: true
-    tty: true
-    init: true
     command: sleep infinity
 
 volumes:

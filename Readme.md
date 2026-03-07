@@ -7,8 +7,29 @@
 - Main entry point: `src/capstone_center/main.py`
 - Default runtime config: `config.yml`
 - Visual harness config: `test/visual_harness/config.center.visual.yml`
+- Terminal-based dev environment: `docker-compose.yml`
+- VS Code devcontainer compose file: `docker-compose.devcontainer.yml`
 - Visual harness Docker setup: `docker-compose.visual-harness.yml`
 - Config reference: `CONFIG_REFERENCE.md`
+
+## Run the Development Environment
+
+If you want the same containerized development environment without using VS Code Dev Containers, use the root `docker-compose.yml` from a normal VS Code terminal:
+
+```bash
+docker compose up -d dev
+docker compose exec dev bash
+```
+
+This gives you the same mounted workspace and Poetry virtualenv layout used by the dev container image, but without attaching VS Code to the container runtime.
+
+To stop it:
+
+```bash
+docker compose down
+```
+
+The existing VS Code devcontainer setup now uses `docker-compose.devcontainer.yml`.
 
 ## Run the Visual Harness
 
