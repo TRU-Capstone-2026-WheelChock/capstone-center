@@ -9,6 +9,4 @@ services:
         GID: 1000
     volumes:
       - .:/app:cached
-    env_file:
-      - .env_dev
     command: sleep infinity
