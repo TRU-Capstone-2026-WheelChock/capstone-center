@@ -8,6 +8,8 @@ services:
         UID: 1000
         GID: 1000
     working_dir: /app
+    env_file:
+      - test/visual_harness/center.env
     volumes:
       - .:/app:cached
     command: bash -lc "poetry run python test/visual_harness/run_center.py"

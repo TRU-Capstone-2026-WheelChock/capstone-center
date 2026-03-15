@@ -31,4 +31,4 @@ from capstone_center.main import main
 
 
 if __name__ == "__main__":
-    main("test/visual_harness/config.center.visual.yml")
+    main()

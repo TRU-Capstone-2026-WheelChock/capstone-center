@@ -17,10 +17,9 @@ RUN --mount=type=cache,target=/root/.cache/pypoetry \
 
 FROM python:3.12-slim-bookworm AS prod
 WORKDIR /app
-ARG CONFIG_FILE=config.yml
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app/src"
-COPY ${CONFIG_FILE} ./config.yml
+COPY config.yml ./config.yml
 COPY src ./src
 CMD ["python", "-m", "capstone_center.main"]

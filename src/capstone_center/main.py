@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Any
 import zmq
@@ -174,8 +175,9 @@ def build_heartbeat_config(config: dict[str, Any]) -> HeartbeatConfig:
         raise SystemExit("runtime heartbeat values must be numeric")
 
 
-def main(config_path: str = "config.yml") -> None:
-    config = load_config(config_path)
+def main(config_path: str | None = None) -> None:
+    resolved = config_path or os.getenv("CENTER_CONFIG_PATH", "config.yml")
+    config = load_config(resolved)
     logger = setup_logger(config)
 
     state = RuntimeState()
