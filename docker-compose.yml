@@ -14,3 +14,11 @@ services:
     tty: true
     init: true
     command: sleep infinity
+
+  center:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      CENTER_CONFIG_PATH: ${CENTER_CONFIG_PATH:-/app/config.yml}
+    command: python -m capstone_center.main
