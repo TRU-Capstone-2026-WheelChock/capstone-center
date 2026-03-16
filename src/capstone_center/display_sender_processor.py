@@ -16,7 +16,7 @@ class DisplaySenderProcessor():
         signal_sensor_process :CoalescedUpdateSignal,
         pub_opt: msg_handler.ZmqPubOptions,
         logger: logging.Logger | None = None,
-        sender_id : str = "1"
+        sender_id : str = "center"
     ):
         self.state = state
         self.state_lock = state_lock

@@ -29,7 +29,7 @@ class MotorSenderProcessor:
         signal_motor_process: CoalescedUpdateSignal,
         pub_opt: msg_handler.ZmqPubOptions,
         logger: logging.Logger | None = None,
-        sender_id: str = "1",
+        sender_id: str = "center",
         loop_time : float = 10.0
     ):
         self.state = state

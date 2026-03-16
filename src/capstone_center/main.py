@@ -175,6 +175,15 @@ def build_heartbeat_config(config: dict[str, Any]) -> HeartbeatConfig:
         raise SystemExit("runtime heartbeat values must be numeric")
 
 
+def get_center_sender_id(config: dict[str, Any]) -> str:
+    app_config = config.get("app", {})
+    if isinstance(app_config, dict):
+        name = app_config.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    return "center"
+
+
 def main(config_path: str | None = None) -> None:
     resolved = config_path or os.getenv("CENTER_CONFIG_PATH", "config.yml")
     config = load_config(resolved)
@@ -192,6 +201,7 @@ def main(config_path: str | None = None) -> None:
 
     sub_opt = get_opt(config, context=ctx)
     hb_config = build_heartbeat_config(config)
+    center_sender_id = get_center_sender_id(config)
 
     signal_sensor_process :CoalescedUpdateSignal = CoalescedUpdateSignal(name = "signal_sensor_process")
     signal_lcd: CoalescedUpdateSignal = CoalescedUpdateSignal(name = "signal_lcd")
@@ -227,7 +237,8 @@ def main(config_path: str | None = None) -> None:
         state_lock,
         signal_lcd,
         pub_opt=get_disp_pub_opt(config, context=ctx),
-        logger=logger
+        logger=logger,
+        sender_id=center_sender_id,
     )
 
     motor_info_sender = MotorSenderProcessor(
@@ -238,6 +249,7 @@ def main(config_path: str | None = None) -> None:
         signal_motor_process=signal_motor,
         pub_opt=get_motor_pub_opt(config, context=ctx),
         logger=logger,
+        sender_id=center_sender_id,
         loop_time=float(config["motor"].get("looptime", 10.0)),
     )
 

@@ -13,6 +13,7 @@ services:
     stdin_open: true
     tty: true
     init: true
+    profiles: ["dev"]
     command: sleep infinity
 
   center:
@@ -21,4 +22,6 @@ services:
       dockerfile: Dockerfile
     environment:
       CENTER_CONFIG_PATH: ${CENTER_CONFIG_PATH:-/app/config.yml}
+    volumes:
+      - ./config.compose.yml:/app/runtime-config/config.compose.yml:ro
     command: python -m capstone_center.main

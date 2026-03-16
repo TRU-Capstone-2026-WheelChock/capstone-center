@@ -8,6 +8,7 @@ import zmq.asyncio
 from capstone_center.main import (
     CenterApp,
     build_heartbeat_config,
+    get_center_sender_id,
     get_disp_pub_opt,
     get_motor_pub_opt,
     get_opt,
@@ -171,6 +172,16 @@ def test_build_heartbeat_config_reads_required_runtime_keys() -> None:
     assert hb_cfg.loop_time == 1.0
     assert hb_cfg.timeout_threshold == 5.0
     assert hb_cfg.remove_threshold == 60.0
+
+
+def test_get_center_sender_id_prefers_app_name() -> None:
+    cfg = {"app": {"name": "capstone-center-dev"}}
+
+    assert get_center_sender_id(cfg) == "capstone-center-dev"
+
+
+def test_get_center_sender_id_falls_back_to_center() -> None:
+    assert get_center_sender_id({}) == "center"
 
 
 @pytest.mark.asyncio
