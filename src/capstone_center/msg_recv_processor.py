@@ -19,12 +19,14 @@ class MessageRecvProcessor:
         signal_sensor_process :CoalescedUpdateSignal,
         sub_opt: msg_handler.ZmqSubOptions,
         logger: logging.Logger | None = None,
+        motor_component_name: str = "motor",
     ):
         self.state = state
         self.state_lock = state_lock
         self.sub_opt = sub_opt
         self.signal_sensor_process = signal_sensor_process
         self.logger = logger or logging.getLogger(__name__)
+        self.motor_component_name = motor_component_name
 
     async def _handle_heart_beat(self, msg: msg_handler.SensorMessage) -> None:
         self.logger.debug(
@@ -61,6 +63,34 @@ class MessageRecvProcessor:
         )
         code, status = msg.get_status()
         self.state.update_status(msg.sender_id, msg.timestamp, code, status)
+        motor_state = self._resolve_motor_mode(msg, status)
+        if motor_state is not None:
+            self.state.set_motor_mode(motor_state)
+
+    def _resolve_motor_mode(
+        self,
+        msg: msg_handler.SensorMessage,
+        status: str,
+    ) -> msg_handler.MotorState | None:
+        if str(getattr(msg, "data_type", "")) != "heartbeat":
+            return None
+        if getattr(msg, "sender_name", None) != self.motor_component_name:
+            return None
+        motor_state_type = msg_handler.MotorState
+        try:
+            return motor_state_type(status)
+        except TypeError:
+            if hasattr(motor_state_type, status):
+                return getattr(motor_state_type, status)
+        except ValueError:
+            pass
+
+        self.logger.debug(
+            "ignoring non-motor status from motor heartbeat sender=%s status=%r",
+            getattr(msg, "sender_id", "<unknown>"),
+            status,
+        )
+        return None
 
     async def _handle_override(self, msg: msg_handler.SensorMessage)->None:
         if not isinstance(msg.payload, msg_handler.schemas.HeartBeatPayload):

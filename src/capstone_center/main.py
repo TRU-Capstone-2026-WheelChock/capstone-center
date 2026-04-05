@@ -213,6 +213,7 @@ def main(config_path: str | None = None) -> None:
         signal_sensor_process,
         sub_opt,
         logger=logger,
+        motor_component_name=str(config.get("motor", {}).get("name", "motor")),
     )
     heartbeat_processor = HeartbeatProcessor(
         state,

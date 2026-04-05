@@ -271,6 +271,53 @@ async def test_handle_override_sets_override_mode_false_for_non_override_status(
 
 
 @pytest.mark.asyncio
+async def test_handle_status_updates_motor_mode_from_motor_heartbeat() -> None:
+    state = RuntimeState()
+    p = MessageRecvProcessor(
+        state,
+        asyncio.Lock(),
+        CoalescedUpdateSignal(),
+        sub_opt=object(),
+        motor_component_name="motor",
+    )
+    msg = SimpleNamespace(
+        sender_id="motor-001",
+        sender_name="motor",
+        timestamp=datetime.now(),
+        data_type="heartbeat",
+        get_status=lambda: (500, "DEAD"),
+    )
+
+    await p._handle_status(msg)
+
+    assert state.motor_mode == target.msg_handler.MotorState.DEAD
+    assert state.status_history["motor-001"].latest().status == "DEAD"
+
+
+@pytest.mark.asyncio
+async def test_handle_status_ignores_non_motor_heartbeat_for_motor_mode() -> None:
+    state = RuntimeState()
+    p = MessageRecvProcessor(
+        state,
+        asyncio.Lock(),
+        CoalescedUpdateSignal(),
+        sub_opt=object(),
+        motor_component_name="motor",
+    )
+    msg = SimpleNamespace(
+        sender_id="display-001",
+        sender_name="display",
+        timestamp=datetime.now(),
+        data_type="heartbeat",
+        get_status=lambda: (500, "DEAD"),
+    )
+
+    await p._handle_status(msg)
+
+    assert state.motor_mode == target.msg_handler.MotorState.STARTING
+
+
+@pytest.mark.asyncio
 async def test_run_uses_sub_opt_for_subscriber(monkeypatch: pytest.MonkeyPatch):
     """Passes the configured subscriber options object into the subscriber factory.
 
