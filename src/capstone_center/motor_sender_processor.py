@@ -61,8 +61,8 @@ class MotorSenderProcessor:
         if isin_override_mode:
             return msg_handler.MotorState.FOLDING
         if is_human:
-            return msg_handler.MotorState.DEPLOYING
-        return msg_handler.MotorState.FOLDING
+            return msg_handler.MotorState.FOLDING
+        return msg_handler.MotorState.DEPLOYING
 
     async def _build_motor_message(
         self,
